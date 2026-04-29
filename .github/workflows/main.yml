@@ -15,18 +15,16 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Instalar Gradle 8.5
-        run: |
-          wget https://services.gradle.org/distributions/gradle-8.5-bin.zip
-          sudo unzip -d /opt/gradle gradle-8.5-bin.zip
-          export PATH=$PATH:/opt/gradle/gradle-8.5/bin
-          echo "/opt/gradle/gradle-8.5/bin" >> $GITHUB_PATH
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Compilar APK con Gradle 8.5
-        run: gradle assembleDebug --stacktrace
+      - name: Compilar con motor forzado
+        run: |
+          chmod +x gradlew || true
+          gradle assembleDebug --no-daemon --stacktrace -Pandroid.builder.sdkDownload=true
 
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
-          name: Camara-S21FE-Pro-Final
+          name: Camara-S21FE-Experimental
           path: "**/*.apk"
