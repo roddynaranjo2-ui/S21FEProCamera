@@ -15,14 +15,12 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Crear Wrapper de Gradle
-        run: gradle wrapper
-
-      - name: Compilar APK con Wrapper
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Forzar compilación
+        run: |
+          gradle assembleDebug --stacktrace
 
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
-          name: App-Camara-S21FE
-          path: "**/*.apk"
+          name: Camara-S21FE-Final
+          path: "**/build/outputs/apk/debug/*.apk"
