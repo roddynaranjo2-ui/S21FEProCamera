@@ -15,15 +15,14 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Permisos para Gradle
-        run: chmod +x gradlew
+      - name: Instalar Gradle
+        run: sudo apt-get install gradle -y
 
-      - name: Compilar APK
-        run: ./gradlew assembleDebug
+      - name: Compilar con Gradle
+        run: gradle assembleDebug
 
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
-          name: Mi-App-Camara
-          path: app/build/outputs/apk/debug/*.apk
-
+          name: Camara-S21FE-Instalable
+          path: "**/*.apk"
