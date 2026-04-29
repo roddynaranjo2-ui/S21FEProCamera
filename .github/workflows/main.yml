@@ -15,10 +15,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Instalar motor Gradle
-        run: sudo apt-get update && sudo apt-get install gradle -y
+      - name: Configurar Gradle Oficial
+        uses: gradle/actions/setup-gradle@v3
 
-      - name: Compilar Proyecto
+      - name: Compilar con Gradle
         run: gradle assembleDebug --stacktrace
 
       - name: Subir APK
