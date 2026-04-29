@@ -15,12 +15,14 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Forzar compilación
-        run: |
-          gradle assembleDebug --stacktrace
+      - name: Instalar motor Gradle
+        run: sudo apt-get update && sudo apt-get install gradle -y
+
+      - name: Compilar Proyecto
+        run: gradle assembleDebug --stacktrace
 
       - name: Subir APK
         uses: actions/upload-artifact@v4
         with:
-          name: Camara-S21FE-Final
-          path: "**/build/outputs/apk/debug/*.apk"
+          name: Camara-S21FE-Pro
+          path: "**/*.apk"
