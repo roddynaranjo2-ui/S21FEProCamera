@@ -1,7 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Colores Base -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    
+    <!-- Colores de Acento y UI -->
+    <color name="accent_teal">#FF03DAC5</color>
+    <color name="accent_teal_dark">#FF018786</color>
+    <color name="shutter_red">#FFFF4444</color>
+    <color name="panel_background">#CC000000</color>
+    <color name="info_bar_background">#40000000</color>
+    
+    <!-- Colores de Compatibilidad (Legacy) -->
     <color name="purple_200">#FFBB86FC</color>
     <color name="purple_500">#FF6200EE</color>
     <color name="purple_700">#FF3700B3</color>

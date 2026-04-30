@@ -1,0 +1,25 @@
+Samsung Galaxy S21 FE Camera Sensor Specifications:
+
+1. Main (Wide) Camera:
+   - Resolution: 12 MP
+   - Aperture: f/1.8
+   - Focal Length: 26mm
+   - Sensor Size: 1/1.76"
+
+2. Ultra-Wide Camera:
+   - Resolution: 12 MP
+   - Aperture: f/2.2
+   - Focal Length: 13mm (123° field of view)
+   - Sensor Size: 1/3.0"
+
+3. Telephoto Camera:
+   - Resolution: 8 MP (often upscaled to 12 MP in software)
+   - Aperture: f/2.4
+   - Focal Length: 76mm (3x optical zoom)
+   - Sensor Size: 1/4.5"
+
+4. Front (Selfie) Camera:
+   - Resolution: 32 MP
+   - Aperture: f/2.2
+   - Focal Length: 26mm
+   - Sensor Size: 1/2.74"

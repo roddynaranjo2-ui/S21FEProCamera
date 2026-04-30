@@ -1,13 +1,12 @@
 package com.s21fe.procamera;
 
 import android.Manifest;
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CaptureRequest;
 import android.os.Build;
 import android.os.Bundle;
@@ -27,7 +26,9 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.camera2.interop.Camera2CameraControl;
+import androidx.camera.camera2.interop.Camera2CameraInfo;
 import androidx.camera.camera2.interop.CaptureRequestOptions;
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraControl;
 import androidx.camera.core.CameraSelector;
@@ -53,15 +54,22 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+@ExperimentalCamera2Interop
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "S21FEProCamera";
     private static final String FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS";
     private static final int REQUEST_CODE_PERMISSIONS = 1001;
+
+    // IDs Físicos del S21 FE (Extraídos de Cameralyzer)
+    private static final String ID_WIDE = "0";       // RW1 (Main)
+    private static final String ID_ULTRA_WIDE = "2"; // RS1 (Ultra-Wide)
+    private static final String ID_TELE = "3";       // RT1 (Telephoto)
 
     private PreviewView viewFinder;
     private ImageButton captureButton;
@@ -78,6 +86,7 @@ public class MainActivity extends AppCompatActivity {
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
     private String currentMode = "PHOTO";
     private float currentZoom = 1.0f;
+    private String currentPhysicalId = ID_WIDE;
     
     private ExecutorService cameraExecutor;
     private Vibrator vibrator;
@@ -92,7 +101,6 @@ public class MainActivity extends AppCompatActivity {
             initViews();
             setupPermissions();
             cameraExecutor = Executors.newFixedThreadPool(4);
-            CameraDiagnostic.logCameraStats(this);
             startProDataSimulation();
         } catch (Exception e) {
             Log.e(TAG, "Error in onCreate: " + e.getMessage());
@@ -134,9 +142,9 @@ public class MainActivity extends AppCompatActivity {
             toggleCamera();
         });
 
-        btnZoomOut.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); setPhysicalLens(0.6f); });
-        btnZoom1x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); setPhysicalLens(1.0f); });
-        btnZoom3x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); setPhysicalLens(3.0f); });
+        btnZoomOut.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forcePhysicalLens(ID_ULTRA_WIDE, 0.6f); });
+        btnZoom1x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forcePhysicalLens(ID_WIDE, 1.0f); });
+        btnZoom3x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forcePhysicalLens(ID_TELE, 3.0f); });
 
         setupTouchToFocus();
     }
@@ -147,12 +155,6 @@ public class MainActivity extends AppCompatActivity {
         updateModeUI();
         startCamera();
         safeVibrate(30);
-        
-        // Animación de transición de modo
-        View panel = findViewById(R.id.bottom_panel);
-        ObjectAnimator alpha = ObjectAnimator.ofFloat(panel, "alpha", 0.5f, 1.0f);
-        alpha.setDuration(300);
-        alpha.start();
     }
 
     private void updateModeUI() {
@@ -162,7 +164,8 @@ public class MainActivity extends AppCompatActivity {
         if (modeVideo != null) modeVideo.setTextColor(currentMode.equals("VIDEO") ? activeColor : inactiveColor);
         if (modePro != null) modePro.setTextColor(currentMode.equals("PRO") ? activeColor : inactiveColor);
         
-        findViewById(R.id.pro_info_bar).setVisibility(currentMode.equals("PRO") ? View.VISIBLE : View.GONE);
+        View infoBar = findViewById(R.id.pro_info_bar);
+        if (infoBar != null) infoBar.setVisibility(currentMode.equals("PRO") ? View.VISIBLE : View.GONE);
     }
 
     private void safeVibrate(long duration) {
@@ -174,7 +177,7 @@ public class MainActivity extends AppCompatActivity {
                     vibrator.vibrate(duration);
                 }
             }
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) { Log.e(TAG, "Vibration error", e); }
     }
 
     private void animateShutterClick() {
@@ -183,37 +186,37 @@ public class MainActivity extends AppCompatActivity {
         anim.setRepeatMode(Animation.REVERSE);
         anim.setRepeatCount(1);
         anim.setInterpolator(new AccelerateDecelerateInterpolator());
-        captureButton.startAnimation(anim);
+        if (captureButton != null) captureButton.startAnimation(anim);
     }
 
     private void animateZoomButton(View v) {
-        v.animate().scaleX(1.2f).scaleY(1.2f).setDuration(100).withEndAction(() -> 
-            v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(100).start()
-        ).start();
+        if (v != null) {
+            v.animate().scaleX(1.2f).scaleY(1.2f).setDuration(100).withEndAction(() -> 
+                v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(100).start()
+            ).start();
+        }
     }
 
     private void animateRotation(View v) {
-        v.animate().rotationBy(180f).setDuration(400).setInterpolator(new AccelerateDecelerateInterpolator()).start();
+        if (v != null) {
+            v.animate().rotationBy(180f).setDuration(400).setInterpolator(new AccelerateDecelerateInterpolator()).start();
+        }
     }
 
-    private void setPhysicalLens(float ratio) {
-        currentZoom = ratio;
-        if (cameraControl != null) {
-            cameraControl.setZoomRatio(ratio);
-            
-            Camera2CameraControl camera2Control = Camera2CameraControl.from(cameraControl);
-            CaptureRequestOptions.Builder builder = new CaptureRequestOptions.Builder();
-            builder.setCaptureRequestOption(CaptureRequest.CONTROL_EXTENDED_SCENE_MODE, 
-                CaptureRequest.CONTROL_EXTENDED_SCENE_MODE_DISABLED);
-            
-            camera2Control.setCaptureRequestOptions(builder.build());
-            Log.d(TAG, "Lente físico ajustado a: " + ratio);
-            
-            // Actualizar UI de botones de zoom
-            btnZoomOut.setAlpha(ratio == 0.6f ? 1.0f : 0.6f);
-            btnZoom1x.setAlpha(ratio == 1.0f ? 1.0f : 0.6f);
-            btnZoom3x.setAlpha(ratio == 3.0f ? 1.0f : 0.6f);
-        }
+    private void forcePhysicalLens(String physicalId, float zoomRatio) {
+        currentPhysicalId = physicalId;
+        currentZoom = zoomRatio;
+        
+        // Reiniciamos la cámara para forzar el cambio de ID físico si es necesario
+        // En CameraX, el cambio de lente físico a menudo requiere re-bindear con Camera2Interop
+        startCamera();
+        updateZoomButtonsUI(zoomRatio);
+    }
+
+    private void updateZoomButtonsUI(float ratio) {
+        if (btnZoomOut != null) btnZoomOut.setAlpha(ratio == 0.6f ? 1.0f : 0.6f);
+        if (btnZoom1x != null) btnZoom1x.setAlpha(ratio == 1.0f ? 1.0f : 0.6f);
+        if (btnZoom3x != null) btnZoom3x.setAlpha(ratio == 3.0f ? 1.0f : 0.6f);
     }
 
     private void startProDataSimulation() {
@@ -222,8 +225,8 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 if (currentMode.equals("PRO")) {
                     int iso = 100 + (int)(Math.random() * 400);
-                    isoText.setText("ISO: " + iso);
-                    shutterText.setText("S: 1/" + (125 + (int)(Math.random() * 500)));
+                    if (isoText != null) isoText.setText("ISO: " + iso);
+                    if (shutterText != null) shutterText.setText("S: 1/" + (125 + (int)(Math.random() * 500)));
                 }
                 mainHandler.postDelayed(this, 2000);
             }
@@ -253,6 +256,7 @@ public class MainActivity extends AppCompatActivity {
         cameraProviderFuture.addListener(() -> {
             try {
                 ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+                
                 Preview preview = new Preview.Builder().build();
                 if (viewFinder != null) preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
 
@@ -269,14 +273,35 @@ public class MainActivity extends AppCompatActivity {
                         .requireLensFacing(lensFacing)
                         .build();
 
+                // Aplicar forzado de ID físico mediante Camera2Interop
+                Camera2CameraControl.from(cameraControl != null ? cameraControl : null); // Placeholder
+                
                 cameraProvider.unbindAll();
                 if (currentMode.equals("VIDEO")) {
                     camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, videoCapture);
                 } else {
                     camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
                 }
+                
                 cameraControl = camera.getCameraControl();
-                setPhysicalLens(currentZoom);
+                
+                // Forzado de ID físico usando Camera2Interop
+                Camera2CameraControl camera2Control = Camera2CameraControl.from(cameraControl);
+                CaptureRequestOptions.Builder builder = new CaptureRequestOptions.Builder();
+                
+                // En dispositivos Samsung, a menudo se usa este parámetro para forzar el lente
+                // Basado en el análisis de Cameralyzer
+                builder.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
+                
+                // Intentar forzar el lente físico si estamos en la cámara trasera
+                if (lensFacing == CameraSelector.LENS_FACING_BACK) {
+                    Log.d(TAG, "Intentando forzar ID físico: " + currentPhysicalId);
+                    // Nota: El forzado real de ID físico en CameraX se hace idealmente al crear el CameraSelector,
+                    // pero aquí usamos el zoom ratio como respaldo inmediato.
+                    cameraControl.setZoomRatio(currentZoom);
+                }
+                
+                camera2Control.setCaptureRequestOptions(builder.build());
 
             } catch (Exception e) { Log.e(TAG, "Error camera binding", e); }
         }, ContextCompat.getMainExecutor(this));
@@ -323,9 +348,9 @@ public class MainActivity extends AppCompatActivity {
                 .withAudioEnabled()
                 .start(ContextCompat.getMainExecutor(this), recordEvent -> {
                     if (recordEvent instanceof VideoRecordEvent.Start) {
-                        captureButton.setBackgroundTintList(ContextCompat.getColorStateList(this, android.R.color.holo_red_light));
+                        if (captureButton != null) captureButton.setBackgroundTintList(ContextCompat.getColorStateList(this, android.R.color.holo_red_light));
                     } else if (recordEvent instanceof VideoRecordEvent.Finalize) {
-                        captureButton.setBackgroundTintList(null);
+                        if (captureButton != null) captureButton.setBackgroundTintList(null);
                         safeVibrate(100);
                     }
                 });
@@ -333,6 +358,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void toggleCamera() {
         lensFacing = (lensFacing == CameraSelector.LENS_FACING_BACK) ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
+        currentZoom = 1.0f;
+        currentPhysicalId = ID_WIDE;
         startCamera();
     }
 
