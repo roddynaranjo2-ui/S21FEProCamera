@@ -15,7 +15,11 @@ find_library(
         log
 )
 
+set(OpenCV_DIR "../../opencv/sdk/native/jni")
+find_package(OpenCV REQUIRED)
+message(STATUS "OpenCV libraries: ${OpenCV_LIBS}")
 target_link_libraries(
         procamera
         ${log-lib}
+        ${OpenCV_LIBS}
 )
