@@ -4,12 +4,12 @@ plugins {
 
 android {
     namespace 'com.s21fe.procamera'
-    compileSdk 34
+    compileSdk 33
 
     defaultConfig {
         applicationId "com.s21fe.procamera"
         minSdk 24
-        targetSdk 34
+        targetSdk 33
         versionCode 1
         versionName "1.0.0"
 

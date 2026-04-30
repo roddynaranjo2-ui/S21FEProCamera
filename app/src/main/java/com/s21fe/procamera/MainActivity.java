@@ -1,6 +1,9 @@
 package com.s21fe.procamera;
 
 import android.Manifest;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ObjectAnimator;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -14,12 +17,13 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.MediaStore;
 import android.util.Log;
+import android.view.View;
+import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.camera2.interop.Camera2CameraControl;
@@ -49,7 +53,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -65,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton switchCameraButton;
     private TextView modePhoto, modeVideo, modePro;
     private Button btnZoomOut, btnZoom1x, btnZoom3x;
+    private TextView isoText, shutterText;
     
     private ImageCapture imageCapture;
     private VideoCapture<Recorder> videoCapture;
@@ -89,6 +93,7 @@ public class MainActivity extends AppCompatActivity {
             setupPermissions();
             cameraExecutor = Executors.newFixedThreadPool(4);
             CameraDiagnostic.logCameraStats(this);
+            startProDataSimulation();
         } catch (Exception e) {
             Log.e(TAG, "Error in onCreate: " + e.getMessage());
         }
@@ -104,6 +109,8 @@ public class MainActivity extends AppCompatActivity {
         btnZoomOut = findViewById(R.id.btn_zoom_out);
         btnZoom1x = findViewById(R.id.btn_zoom_1x);
         btnZoom3x = findViewById(R.id.btn_zoom_3x);
+        isoText = findViewById(R.id.iso_text);
+        shutterText = findViewById(R.id.shutter_text);
 
         updateModeUI();
 
@@ -112,22 +119,40 @@ public class MainActivity extends AppCompatActivity {
             if (currentMode.equals("VIDEO")) {
                 captureVideo();
             } else {
-                animateButtonClick();
+                animateShutterClick();
                 takePhoto();
             }
         });
 
-        modePhoto.setOnClickListener(v -> { currentMode = "PHOTO"; updateModeUI(); startCamera(); safeVibrate(30); });
-        modeVideo.setOnClickListener(v -> { currentMode = "VIDEO"; updateModeUI(); startCamera(); safeVibrate(30); });
-        modePro.setOnClickListener(v -> { currentMode = "PRO"; updateModeUI(); startCamera(); safeVibrate(30); });
+        modePhoto.setOnClickListener(v -> switchMode("PHOTO"));
+        modeVideo.setOnClickListener(v -> switchMode("VIDEO"));
+        modePro.setOnClickListener(v -> switchMode("PRO"));
 
-        switchCameraButton.setOnClickListener(v -> { safeVibrate(40); toggleCamera(); });
+        switchCameraButton.setOnClickListener(v -> {
+            animateRotation(v);
+            safeVibrate(40);
+            toggleCamera();
+        });
 
-        btnZoomOut.setOnClickListener(v -> { safeVibrate(20); setPhysicalLens(0.6f); });
-        btnZoom1x.setOnClickListener(v -> { safeVibrate(20); setPhysicalLens(1.0f); });
-        btnZoom3x.setOnClickListener(v -> { safeVibrate(20); setPhysicalLens(3.0f); });
+        btnZoomOut.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); setPhysicalLens(0.6f); });
+        btnZoom1x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); setPhysicalLens(1.0f); });
+        btnZoom3x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); setPhysicalLens(3.0f); });
 
         setupTouchToFocus();
+    }
+
+    private void switchMode(String mode) {
+        if (currentMode.equals(mode)) return;
+        currentMode = mode;
+        updateModeUI();
+        startCamera();
+        safeVibrate(30);
+        
+        // Animación de transición de modo
+        View panel = findViewById(R.id.bottom_panel);
+        ObjectAnimator alpha = ObjectAnimator.ofFloat(panel, "alpha", 0.5f, 1.0f);
+        alpha.setDuration(300);
+        alpha.start();
     }
 
     private void updateModeUI() {
@@ -136,6 +161,8 @@ public class MainActivity extends AppCompatActivity {
         if (modePhoto != null) modePhoto.setTextColor(currentMode.equals("PHOTO") ? activeColor : inactiveColor);
         if (modeVideo != null) modeVideo.setTextColor(currentMode.equals("VIDEO") ? activeColor : inactiveColor);
         if (modePro != null) modePro.setTextColor(currentMode.equals("PRO") ? activeColor : inactiveColor);
+        
+        findViewById(R.id.pro_info_bar).setVisibility(currentMode.equals("PRO") ? View.VISIBLE : View.GONE);
     }
 
     private void safeVibrate(long duration) {
@@ -150,31 +177,57 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) { e.printStackTrace(); }
     }
 
-    private void animateButtonClick() {
-        ScaleAnimation anim = new ScaleAnimation(1f, 0.9f, 1f, 0.9f, Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
-        anim.setDuration(100);
+    private void animateShutterClick() {
+        ScaleAnimation anim = new ScaleAnimation(1f, 0.85f, 1f, 0.85f, Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
+        anim.setDuration(80);
         anim.setRepeatMode(Animation.REVERSE);
         anim.setRepeatCount(1);
+        anim.setInterpolator(new AccelerateDecelerateInterpolator());
         captureButton.startAnimation(anim);
+    }
+
+    private void animateZoomButton(View v) {
+        v.animate().scaleX(1.2f).scaleY(1.2f).setDuration(100).withEndAction(() -> 
+            v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(100).start()
+        ).start();
+    }
+
+    private void animateRotation(View v) {
+        v.animate().rotationBy(180f).setDuration(400).setInterpolator(new AccelerateDecelerateInterpolator()).start();
     }
 
     private void setPhysicalLens(float ratio) {
         currentZoom = ratio;
         if (cameraControl != null) {
-            // Aplicamos el ratio de zoom
             cameraControl.setZoomRatio(ratio);
             
-            // Usamos Camera2Interop para optimizar el cambio de lente físico
             Camera2CameraControl camera2Control = Camera2CameraControl.from(cameraControl);
             CaptureRequestOptions.Builder builder = new CaptureRequestOptions.Builder();
-            
-            // Forzar el uso del lente de mayor resolución para el ratio seleccionado
             builder.setCaptureRequestOption(CaptureRequest.CONTROL_EXTENDED_SCENE_MODE, 
                 CaptureRequest.CONTROL_EXTENDED_SCENE_MODE_DISABLED);
             
             camera2Control.setCaptureRequestOptions(builder.build());
             Log.d(TAG, "Lente físico ajustado a: " + ratio);
+            
+            // Actualizar UI de botones de zoom
+            btnZoomOut.setAlpha(ratio == 0.6f ? 1.0f : 0.6f);
+            btnZoom1x.setAlpha(ratio == 1.0f ? 1.0f : 0.6f);
+            btnZoom3x.setAlpha(ratio == 3.0f ? 1.0f : 0.6f);
         }
+    }
+
+    private void startProDataSimulation() {
+        mainHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (currentMode.equals("PRO")) {
+                    int iso = 100 + (int)(Math.random() * 400);
+                    isoText.setText("ISO: " + iso);
+                    shutterText.setText("S: 1/" + (125 + (int)(Math.random() * 500)));
+                }
+                mainHandler.postDelayed(this, 2000);
+            }
+        }, 2000);
     }
 
     private void setupPermissions() {
@@ -300,5 +353,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         if (cameraExecutor != null) cameraExecutor.shutdown();
+        mainHandler.removeCallbacksAndMessages(null);
     }
 }
