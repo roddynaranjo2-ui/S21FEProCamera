@@ -9,7 +9,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
 import android.util.Log;
-import android.view.ScaleGestureDetector;
+import android.view.View;
+import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -17,16 +18,13 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraControl;
-import androidx.camera.core.CameraInfo;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.FocusMeteringAction;
-import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.Preview;
-import androidx.camera.core.SurfaceOrientedMeteringPointFactory;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
@@ -51,14 +49,15 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton captureButton;
     private ImageButton switchCameraButton;
     private TextView modeSelector;
-    private TextView isoText;
+    private Button btnZoomOut, btnZoom1x, btnZoom3x;
     
     private ImageCapture imageCapture;
     private Camera camera;
     private CameraControl cameraControl;
-    private CameraInfo cameraInfo;
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
+    private String currentMode = "PHOTO";
     
+    // ExecutorService con pool de hilos para manejar ráfagas y guardado pesado
     private ExecutorService cameraExecutor;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -73,7 +72,8 @@ public class MainActivity extends AppCompatActivity {
 
         initViews();
         setupPermissions();
-        cameraExecutor = Executors.newSingleThreadExecutor();
+        // Pool de 4 hilos para procesar ráfagas de fotos en paralelo
+        cameraExecutor = Executors.newFixedThreadPool(4);
     }
 
     private void initViews() {
@@ -81,7 +81,9 @@ public class MainActivity extends AppCompatActivity {
         captureButton = findViewById(R.id.capture_button);
         switchCameraButton = findViewById(R.id.switch_camera_button);
         modeSelector = findViewById(R.id.mode_selector);
-        isoText = findViewById(R.id.iso_text);
+        btnZoomOut = findViewById(R.id.btn_zoom_out);
+        btnZoom1x = findViewById(R.id.btn_zoom_1x);
+        btnZoom3x = findViewById(R.id.btn_zoom_3x);
 
         captureButton.setOnClickListener(v -> {
             animateCapture();
@@ -90,14 +92,49 @@ public class MainActivity extends AppCompatActivity {
 
         switchCameraButton.setOnClickListener(v -> toggleCamera());
 
+        // Lógica de Selector de Modos (Ciclo: PHOTO -> VIDEO -> PRO)
+        modeSelector.setOnClickListener(v -> {
+            switch (currentMode) {
+                case "PHOTO":
+                    currentMode = "VIDEO";
+                    modeSelector.setText("PHOTO   [VIDEO]   PRO");
+                    break;
+                case "VIDEO":
+                    currentMode = "PRO";
+                    modeSelector.setText("PHOTO   VIDEO   [PRO]");
+                    break;
+                case "PRO":
+                    currentMode = "PHOTO";
+                    modeSelector.setText("[PHOTO]   VIDEO   PRO");
+                    break;
+            }
+            showToast("Modo: " + currentMode);
+            startCamera(); // Reinicia la cámara con la configuración del nuevo modo
+        });
+
+        // Control de Lentes y Zoom (Mapeo de hardware del S21 FE)
+        btnZoomOut.setOnClickListener(v -> setZoom(0.6f)); // Ultra Gran Angular
+        btnZoom1x.setOnClickListener(v -> setZoom(1.0f));  // Lente Principal
+        btnZoom3x.setOnClickListener(v -> setZoom(3.0f));  // Teleobjetivo Óptico
+        
+        // Soporte para zoom táctil (Pinch to Zoom) se hereda de PreviewView si se configura, 
+        // pero aquí lo forzamos mediante botones para precisión.
+
         setupTouchToFocus();
+    }
+
+    private void setZoom(float ratio) {
+        if (cameraControl != null) {
+            cameraControl.setZoomRatio(ratio)
+                .addListener(() -> Log.d(TAG, "Zoom ajustado a: " + ratio), ContextCompat.getMainExecutor(this));
+            showToast("Zoom: " + ratio + "x");
+        }
     }
 
     private void setupPermissions() {
         List<String> permissions = new ArrayList<>();
         permissions.add(Manifest.permission.CAMERA);
         permissions.add(Manifest.permission.RECORD_AUDIO);
-        
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
             permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
         }
@@ -123,42 +160,31 @@ public class MainActivity extends AppCompatActivity {
             try {
                 ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
 
-                // 1. Preview de alta calidad
                 Preview preview = new Preview.Builder()
-                        .setTargetName("Preview")
+                        .setTargetName("LivePreview")
                         .build();
                 preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
 
-                // 2. Captura optimizada
-                imageCapture = new ImageCapture.Builder()
-                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-                        .setTargetRotation(viewFinder.getDisplay().getRotation())
-                        .build();
-
-                // 3. Análisis para motor C++ (Simulado)
-                ImageAnalysis imageAnalysis = new ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build();
-                imageAnalysis.setAnalyzer(cameraExecutor, image -> {
-                    // Aquí el motor C++ procesaría los frames
-                    image.close();
-                });
+                // Configuración de captura basada en el modo
+                ImageCapture.Builder builder = new ImageCapture.Builder()
+                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY);
+                
+                // Si estamos en modo PRO, podríamos añadir más configuraciones aquí
+                imageCapture = builder.build();
 
                 CameraSelector cameraSelector = new CameraSelector.Builder()
                         .requireLensFacing(lensFacing)
                         .build();
 
                 cameraProvider.unbindAll();
-                camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture, imageAnalysis);
-                
+                camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
                 cameraControl = camera.getCameraControl();
-                cameraInfo = camera.getCameraInfo();
-
-                enableAutoFocus();
+                
+                // Reset zoom a 1x al iniciar
+                setZoom(1.0f);
 
             } catch (ExecutionException | InterruptedException e) {
-                Log.e(TAG, "Fallo al iniciar cámara", e);
-                showToast("Error crítico al iniciar cámara");
+                Log.e(TAG, "Error fatal al iniciar cámara", e);
             }
         }, ContextCompat.getMainExecutor(this));
     }
@@ -166,11 +192,12 @@ public class MainActivity extends AppCompatActivity {
     private void takePhoto() {
         if (imageCapture == null) return;
 
-        String name = "S21FE_" + new SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis());
+        // Generamos un nombre único con milisegundos para evitar colisiones en ráfaga
+        String name = "S21FE_PRO_" + new SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis());
+        
         ContentValues contentValues = new ContentValues();
         contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
         contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
-        
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
             contentValues.put(MediaStore.Images.Media.RELATIVE_PATH, "DCIM/Camera");
         }
@@ -179,20 +206,19 @@ public class MainActivity extends AppCompatActivity {
                 .Builder(getContentResolver(), MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
                 .build();
 
+        // El uso de cameraExecutor (FixedThreadPool) permite que múltiples capturas se procesen sin bloquearse
         imageCapture.takePicture(outputOptions, cameraExecutor, new ImageCapture.OnImageSavedCallback() {
             @Override
             public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputResults) {
-                mainHandler.post(() -> {
-                    showToast("Captura guardada en Galería");
-                    Log.d(TAG, "Imagen guardada: " + outputResults.getSavedUri());
-                });
+                // Logueamos en segundo plano, notificamos éxito solo si es necesario para no saturar la UI
+                Log.d(TAG, "Imagen procesada y guardada: " + outputResults.getSavedUri());
             }
 
             @Override
             public void onError(@NonNull ImageCaptureException exception) {
                 mainHandler.post(() -> {
-                    Log.e(TAG, "Error de captura: " + exception.getMessage());
-                    showToast("Error al guardar la foto");
+                    Log.e(TAG, "Error en ráfaga/guardado: " + exception.getMessage());
+                    showToast("Error de guardado: " + exception.getMessage());
                 });
             }
         });
@@ -210,28 +236,15 @@ public class MainActivity extends AppCompatActivity {
 
             MeteringPointFactory factory = viewFinder.getMeteringPointFactory();
             MeteringPoint point = factory.createPoint(event.getX(), event.getY());
-            FocusMeteringAction action = new FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
+            FocusMeteringAction action = new FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE)
                     .setAutoCancelDuration(3, TimeUnit.SECONDS)
                     .build();
 
             if (cameraControl != null) {
                 cameraControl.startFocusAndMetering(action);
-                showToast("Enfocando...");
             }
             return true;
         });
-    }
-
-    private void enableAutoFocus() {
-        if (cameraControl != null) {
-            // Foco automático continuo
-            MeteringPointFactory factory = new SurfaceOrientedMeteringPointFactory(1f, 1f);
-            MeteringPoint centerPoint = factory.createPoint(0.5f, 0.5f);
-            FocusMeteringAction action = new FocusMeteringAction.Builder(centerPoint)
-                    .addPoint(centerPoint, FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE)
-                    .build();
-            cameraControl.startFocusAndMetering(action);
-        }
     }
 
     private void animateCapture() {
@@ -241,10 +254,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void showToast(String message) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-    }
-
-    private boolean allPermissionsGranted() {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
     }
 
     @Override

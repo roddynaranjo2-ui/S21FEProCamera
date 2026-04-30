@@ -11,7 +11,7 @@
         android:layout_height="match_parent"
         app:scaleType="fillCenter" />
 
-    <!-- Overlay de información Pro -->
+    <!-- Info Bar -->
     <LinearLayout
         android:id="@+id/pro_info_bar"
         android:layout_width="wrap_content"
@@ -22,43 +22,37 @@
         android:padding="8dp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
-
-        <TextView
-            android:id="@+id/iso_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="ISO: AUTO"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:layout_marginEnd="12dp"/>
-
-        <TextView
-            android:id="@+id/shutter_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="S: 1/125"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp" />
+        <TextView android:id="@+id/iso_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ISO: AUTO" android:textColor="#FFFFFF" android:textSize="12sp" android:layout_marginEnd="12dp"/>
+        <TextView android:id="@+id/shutter_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="S: 1/125" android:textColor="#FFFFFF" android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- Barra inferior de control -->
-    <View
-        android:id="@+id/bottom_panel"
-        android:layout_width="match_parent"
-        android:layout_height="160dp"
-        android:background="#CC000000"
-        app:layout_constraintBottom_toBottomOf="parent" />
+    <!-- Zoom Controls -->
+    <LinearLayout
+        android:id="@+id/zoom_controls"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toTopOf="@id/mode_selector"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+        <Button android:id="@+id/btn_zoom_out" android:layout_width="48dp" android:layout_height="48dp" android:text="0.6x" android:textSize="10sp" android:backgroundTint="#80000000" android:layout_margin="4dp"/>
+        <Button android:id="@+id/btn_zoom_1x" android:layout_width="48dp" android:layout_height="48dp" android:text="1x" android:textSize="10sp" android:backgroundTint="#80000000" android:layout_margin="4dp"/>
+        <Button android:id="@+id/btn_zoom_3x" android:layout_width="48dp" android:layout_height="48dp" android:text="3x" android:textSize="10sp" android:backgroundTint="#80000000" android:layout_margin="4dp"/>
+    </LinearLayout>
+
+    <!-- Bottom Panel -->
+    <View android:id="@+id/bottom_panel" android:layout_width="match_parent" android:layout_height="160dp" android:background="#CC000000" app:layout_constraintBottom_toBottomOf="parent" />
 
     <TextView
         android:id="@+id/mode_selector"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="24dp"
-        android:text="PORTRAIT   PHOTO   VIDEO   PRO"
+        android:text="PHOTO   VIDEO   PRO"
         android:textColor="#FFFFFF"
         android:textSize="14sp"
         android:textStyle="bold"
-        android:letterSpacing="0.1"
         app:layout_constraintBottom_toTopOf="@id/capture_button"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
@@ -69,19 +63,15 @@
         android:layout_height="72dp"
         android:layout_marginBottom="32dp"
         android:background="@drawable/shutter_button_bg"
-        android:elevation="4dp"
-        android:scaleType="centerInside"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
     <ImageButton
         android:id="@+id/switch_camera_button"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="48dp" android:layout_height="48dp"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:src="@android:drawable/ic_menu_rotate"
-        android:contentDescription="Switch Camera"
         app:tint="#FFFFFF"
         app:layout_constraintBottom_toBottomOf="@id/capture_button"
         app:layout_constraintEnd_toEndOf="parent"
