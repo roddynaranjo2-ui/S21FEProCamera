@@ -77,18 +77,26 @@ public class MainActivity extends AppCompatActivity {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     static {
-        System.loadLibrary("procamera");
+        try {
+            System.loadLibrary("procamera");
+        } catch (UnsatisfiedLinkError e) {
+            Log.e(TAG, "Native library not found");
+        }
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
-        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-        initViews();
-        setupPermissions();
-        cameraExecutor = Executors.newFixedThreadPool(4);
+        try {
+            setContentView(R.layout.activity_main);
+            vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            initViews();
+            setupPermissions();
+            cameraExecutor = Executors.newFixedThreadPool(4);
+        } catch (Exception e) {
+            Log.e(TAG, "Error in onCreate: " + e.getMessage());
+            Toast.makeText(this, "Error de inicio: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     private void initViews() {
@@ -96,7 +104,6 @@ public class MainActivity extends AppCompatActivity {
         captureButton = findViewById(R.id.capture_button);
         switchCameraButton = findViewById(R.id.switch_camera_button);
         
-        // Selector de modos individual para mejor control de color
         modePhoto = findViewById(R.id.mode_photo);
         modeVideo = findViewById(R.id.mode_video);
         modePro = findViewById(R.id.mode_pro);
@@ -105,10 +112,16 @@ public class MainActivity extends AppCompatActivity {
         btnZoom1x = findViewById(R.id.btn_zoom_1x);
         btnZoom3x = findViewById(R.id.btn_zoom_3x);
 
+        // Protección contra NullPointer si algún ID no se encuentra
+        if (modePhoto == null || modeVideo == null || modePro == null || captureButton == null) {
+            Log.e(TAG, "One or more views not found!");
+            return;
+        }
+
         updateModeUI();
 
         captureButton.setOnClickListener(v -> {
-            vibrate(50);
+            safeVibrate(50);
             if (currentMode.equals("VIDEO")) {
                 captureVideo();
             } else {
@@ -117,39 +130,44 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        modePhoto.setOnClickListener(v -> { currentMode = "PHOTO"; updateModeUI(); startCamera(); vibrate(30); });
-        modeVideo.setOnClickListener(v -> { currentMode = "VIDEO"; updateModeUI(); startCamera(); vibrate(30); });
-        modePro.setOnClickListener(v -> { currentMode = "PRO"; updateModeUI(); startCamera(); vibrate(30); });
+        modePhoto.setOnClickListener(v -> { currentMode = "PHOTO"; updateModeUI(); startCamera(); safeVibrate(30); });
+        modeVideo.setOnClickListener(v -> { currentMode = "VIDEO"; updateModeUI(); startCamera(); safeVibrate(30); });
+        modePro.setOnClickListener(v -> { currentMode = "PRO"; updateModeUI(); startCamera(); safeVibrate(30); });
 
-        switchCameraButton.setOnClickListener(v -> { vibrate(40); toggleCamera(); });
+        switchCameraButton.setOnClickListener(v -> { safeVibrate(40); toggleCamera(); });
 
-        btnZoomOut.setOnClickListener(v -> { vibrate(20); setZoom(0.6f); });
-        btnZoom1x.setOnClickListener(v -> { vibrate(20); setZoom(1.0f); });
-        btnZoom3x.setOnClickListener(v -> { vibrate(20); setZoom(3.0f); });
+        if (btnZoomOut != null) btnZoomOut.setOnClickListener(v -> { safeVibrate(20); setZoom(0.6f); });
+        if (btnZoom1x != null) btnZoom1x.setOnClickListener(v -> { safeVibrate(20); setZoom(1.0f); });
+        if (btnZoom3x != null) btnZoom3x.setOnClickListener(v -> { safeVibrate(20); setZoom(3.0f); });
 
         setupTouchToFocus();
     }
 
     private void updateModeUI() {
-        int activeColor = Color.parseColor("#03DAC5"); // Verde azulado
+        int activeColor = Color.parseColor("#03DAC5");
         int inactiveColor = Color.WHITE;
 
-        modePhoto.setTextColor(currentMode.equals("PHOTO") ? activeColor : inactiveColor);
-        modeVideo.setTextColor(currentMode.equals("VIDEO") ? activeColor : inactiveColor);
-        modePro.setTextColor(currentMode.equals("PRO") ? activeColor : inactiveColor);
+        if (modePhoto != null) modePhoto.setTextColor(currentMode.equals("PHOTO") ? activeColor : inactiveColor);
+        if (modeVideo != null) modeVideo.setTextColor(currentMode.equals("VIDEO") ? activeColor : inactiveColor);
+        if (modePro != null) modePro.setTextColor(currentMode.equals("PRO") ? activeColor : inactiveColor);
     }
 
-    private void vibrate(long duration) {
-        if (vibrator != null && vibrator.hasVibrator()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
-            } else {
-                vibrator.vibrate(duration);
+    private void safeVibrate(long duration) {
+        try {
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
+                } else {
+                    vibrator.vibrate(duration);
+                }
             }
+        } catch (Exception e) {
+            Log.e(TAG, "Vibration failed");
         }
     }
 
     private void animateButtonClick() {
+        if (captureButton == null) return;
         ScaleAnimation anim = new ScaleAnimation(1f, 0.9f, 1f, 0.9f, 
                 Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
         anim.setDuration(100);
@@ -165,12 +183,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupPermissions() {
-        String[] permissions = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P ?
-                new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE} :
-                new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO};
+        List<String> permissionsList = new ArrayList<>();
+        permissionsList.add(Manifest.permission.CAMERA);
+        permissionsList.add(Manifest.permission.RECORD_AUDIO);
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            permissionsList.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        }
 
         List<String> listPermissionsNeeded = new ArrayList<>();
-        for (String p : permissions) {
+        for (String p : permissionsList) {
             if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
                 listPermissionsNeeded.add(p);
             }
@@ -191,7 +212,9 @@ public class MainActivity extends AppCompatActivity {
                 ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
 
                 Preview preview = new Preview.Builder().build();
-                preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
+                if (viewFinder != null) {
+                    preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
+                }
 
                 imageCapture = new ImageCapture.Builder()
                         .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
@@ -216,8 +239,8 @@ public class MainActivity extends AppCompatActivity {
                 
                 cameraControl = camera.getCameraControl();
 
-            } catch (ExecutionException | InterruptedException e) {
-                Log.e(TAG, "Error camera", e);
+            } catch (Exception e) {
+                Log.e(TAG, "Error camera binding: " + e.getMessage());
             }
         }, ContextCompat.getMainExecutor(this));
     }
@@ -269,16 +292,19 @@ public class MainActivity extends AppCompatActivity {
                 .setContentValues(contentValues)
                 .build();
 
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        
         recording = videoCapture.getOutput()
                 .prepareRecording(this, mediaStoreOutputOptions)
                 .withAudioEnabled()
                 .start(ContextCompat.getMainExecutor(this), recordEvent -> {
                     if (recordEvent instanceof VideoRecordEvent.Start) {
-                        captureButton.setBackgroundTintList(ContextCompat.getColorStateList(this, android.R.color.holo_red_light));
-                        // Animación de grabación (pestañeo o escala)
+                        if (captureButton != null) captureButton.setBackgroundTintList(ContextCompat.getColorStateList(this, android.R.color.holo_red_light));
                     } else if (recordEvent instanceof VideoRecordEvent.Finalize) {
-                        captureButton.setBackgroundTintList(null);
-                        vibrate(100);
+                        if (captureButton != null) captureButton.setBackgroundTintList(null);
+                        safeVibrate(100);
                     }
                 });
     }
@@ -290,6 +316,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupTouchToFocus() {
+        if (viewFinder == null) return;
         viewFinder.setOnTouchListener((v, event) -> {
             if (event.getAction() != android.view.MotionEvent.ACTION_UP) return false;
             MeteringPointFactory factory = viewFinder.getMeteringPointFactory();
@@ -297,7 +324,7 @@ public class MainActivity extends AppCompatActivity {
             FocusMeteringAction action = new FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
                     .setAutoCancelDuration(3, TimeUnit.SECONDS).build();
             if (cameraControl != null) cameraControl.startFocusAndMetering(action);
-            vibrate(20);
+            safeVibrate(20);
             return true;
         });
     }
@@ -305,6 +332,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        cameraExecutor.shutdown();
+        if (cameraExecutor != null) cameraExecutor.shutdown();
     }
 }
