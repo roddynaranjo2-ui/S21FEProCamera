@@ -89,7 +89,12 @@ public class MainActivity extends AppCompatActivity {
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
     private String currentMode = "PHOTO";
     private float currentZoom = 1.0f;
+    private float currentZoomWide = 1.0f;
+    private float currentZoomUltraWide = 0.6f;
+    private float currentZoomTele = 3.0f;
     private String targetPhysicalId = ID_WIDE;
+    private String currentlyBoundPhysicalId = ID_WIDE;
+    private ProcessCameraProvider cameraProvider;
     
     private ExecutorService cameraExecutor;
     private Vibrator vibrator;
@@ -108,6 +113,14 @@ public class MainActivity extends AppCompatActivity {
             setupPermissions();
             cameraExecutor = Executors.newFixedThreadPool(4);
             startProDataSimulation();
+            ProcessCameraProvider.getInstance(this).addListener(() -> {
+                try {
+                    cameraProvider = ProcessCameraProvider.getInstance(this).get();
+                    startCamera();
+                } catch (Exception e) {
+                    Log.e(TAG, "Error getting camera provider: " + e.getMessage());
+                }
+            }, ContextCompat.getMainExecutor(this));
         } catch (Exception e) {
             Log.e(TAG, "Error in onCreate: " + e.getMessage());
         }
@@ -176,30 +189,52 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateZoomFromSlider(float zoom) {
         currentZoom = zoom;
-        if (zoom < 1.0f) targetPhysicalId = ID_ULTRA_WIDE;
-        else if (zoom < 3.0f) targetPhysicalId = ID_WIDE;
-        else targetPhysicalId = ID_TELE;
-        
-        if (cameraControl != null) {
-            cameraControl.setZoomRatio(zoom);
+        String newTargetPhysicalId = targetPhysicalId;
+        if (zoom < 1.0f) newTargetPhysicalId = ID_ULTRA_WIDE;
+        else if (zoom < 3.0f) newTargetPhysicalId = ID_WIDE;
+        else newTargetPhysicalId = ID_TELE;
+
+        if (!newTargetPhysicalId.equals(targetPhysicalId)) {
+            targetPhysicalId = newTargetPhysicalId;
+            startCamera(); // Re-bind si el lente físico cambia
+        } else {
+            if (cameraControl != null) {
+                cameraControl.setZoomRatio(zoom);
+            }
         }
-        updateZoomButtonsUI(zoom);
+        // Guardar el zoom para el lente actual
+        if (targetPhysicalId.equals(ID_ULTRA_WIDE)) currentZoomUltraWide = zoom;
+        else if (targetPhysicalId.equals(ID_WIDE)) currentZoomWide = zoom;
+        else if (targetPhysicalId.equals(ID_TELE)) currentZoomTele = zoom;
+        updateZoomButtonsUI(currentZoom);
     }
 
     private void forceLens(String physicalId, float zoom) {
         targetPhysicalId = physicalId;
-        currentZoom = zoom;
-        if (zoomSlider != null) zoomSlider.setProgress((int)(zoom * 10));
+        // Recuperar el zoom guardado para este lente
+        if (targetPhysicalId.equals(ID_ULTRA_WIDE)) currentZoom = currentZoomUltraWide;
+        else if (targetPhysicalId.equals(ID_WIDE)) currentZoom = currentZoomWide;
+        else if (targetPhysicalId.equals(ID_TELE)) currentZoom = currentZoomTele;
+
+        if (zoomSlider != null) zoomSlider.setProgress((int)(currentZoom * 10));
         
-        if (viewFinder != null) {
-            viewFinder.animate().alpha(0.7f).setDuration(80).withEndAction(() -> {
+        // Si el lente físico objetivo es diferente al actualmente enlazado, entonces necesitamos re-bindear.
+        // De lo contrario, solo actualizamos el zoom.
+        if (!currentlyBoundPhysicalId.equals(physicalId)) {
+            if (viewFinder != null) {
+                viewFinder.animate().alpha(0.7f).setDuration(80).withEndAction(() -> {
+                    startCamera();
+                    viewFinder.animate().alpha(1.0f).setDuration(150).start();
+                }).start();
+            } else {
                 startCamera();
-                viewFinder.animate().alpha(1.0f).setDuration(150).start();
-            }).start();
+            }
         } else {
-            startCamera();
+            if (cameraControl != null) {
+                cameraControl.setZoomRatio(currentZoom);
+            }
         }
-        updateZoomButtonsUI(zoom);
+        updateZoomButtonsUI(currentZoom);
     }
 
     private void switchMode(String mode) {
@@ -294,10 +329,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startCamera() {
-        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
-        cameraProviderFuture.addListener(() -> {
-            try {
-                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+        if (cameraProvider == null) {
+            Log.e(TAG, "CameraProvider not initialized.");
+            return;
+        }
+
+        // Solo re-bind si el lente físico ha cambiado
+        if (currentlyBoundPhysicalId.equals(targetPhysicalId) && camera != null) {
+            // Si el lente físico es el mismo, solo actualizamos el zoom si es necesario
+            if (cameraControl != null) {
+                cameraControl.setZoomRatio(currentZoom);
+            }
+            return;
+        }
+
+        try {
+            cameraProvider.unbindAll();
+            currentlyBoundPhysicalId = targetPhysicalId;
                 
                 Preview preview = new Preview.Builder()
                         .setTargetName("S26Preview")
@@ -315,10 +363,17 @@ public class MainActivity extends AppCompatActivity {
                 videoCapture = VideoCapture.withOutput(recorder);
 
                 CameraSelector cameraSelector = new CameraSelector.Builder()
-                        .requireLensFacing(lensFacing)
-                        .build();
+                    .requireLensFacing(lensFacing)
+                    .addCameraFilter(cameraInfo -> {
+                        List<CameraInfo> filteredCameraInfo = new ArrayList<>();
+                        Camera2CameraInfo camera2CameraInfo = Camera2CameraInfo.from(cameraInfo);
+                        if (camera2CameraInfo.getPhysicalCameraId().equals(targetPhysicalId)) {
+                            filteredCameraInfo.add(cameraInfo);
+                        }
+                        return filteredCameraInfo;
+                    })
+                    .build();
 
-                cameraProvider.unbindAll();
                 if (currentMode.equals("VIDEO")) {
                     camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, videoCapture);
                 } else {
@@ -326,6 +381,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 
                 cameraControl = camera.getCameraControl();
+                cameraControl.setZoomRatio(currentZoom); // Aplicar el zoom guardado al re-bind
                 
                 // PROCESAMIENTO COMPUTACIONAL (ESTILO GCAM/SAMSUNG)
                 Camera2CameraControl camera2Control = Camera2CameraControl.from(cameraControl);
@@ -333,7 +389,6 @@ public class MainActivity extends AppCompatActivity {
                 
                 if (lensFacing == CameraSelector.LENS_FACING_BACK) {
                     builder.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
-                    cameraControl.setZoomRatio(currentZoom);
                     
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                         // Forzado de reducción de ruido y HDR computacional
@@ -348,7 +403,9 @@ public class MainActivity extends AppCompatActivity {
                 camera2Control.setCaptureRequestOptions(builder.build());
 
             } catch (Exception e) { Log.e(TAG, "Error camera binding", e); }
-        }, ContextCompat.getMainExecutor(this));
+        // No hay un listener aquí, ya que la llamada a startCamera() ya está dentro de un listener o se llama directamente.
+        // La lógica de re-binding se ha movido dentro de startCamera().
+        // El ContextCompat.getMainExecutor(this) ya no es necesario aquí.
     }
 
     private void takePhoto() {
@@ -401,10 +458,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void toggleCamera() {
+        // Guardar el zoom actual antes de cambiar de cámara
+        if (targetPhysicalId.equals(ID_ULTRA_WIDE)) currentZoomUltraWide = currentZoom;
+        else if (targetPhysicalId.equals(ID_WIDE)) currentZoomWide = currentZoom;
+        else if (targetPhysicalId.equals(ID_TELE)) currentZoomTele = currentZoom;
+
         lensFacing = (lensFacing == CameraSelector.LENS_FACING_BACK) ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
-        currentZoom = 1.0f;
-        targetPhysicalId = ID_WIDE;
-        if (zoomSlider != null) zoomSlider.setProgress(10);
+        
+        // Al cambiar a la cámara frontal, asumimos un ID físico por defecto y un zoom de 1x
+        // Si la cámara frontal tuviera múltiples lentes físicos, se necesitaría una lógica similar a la trasera
+        if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+            targetPhysicalId = ID_WIDE; // Asumimos que la cámara frontal es un lente 'wide' lógico
+            currentZoom = 1.0f; // El zoom de la cámara frontal siempre empieza en 1x
+        } else { // Volviendo a la cámara trasera
+            targetPhysicalId = ID_WIDE; // Por defecto, volvemos al lente wide trasero
+            currentZoom = currentZoomWide; // Recuperamos el último zoom del lente wide trasero
+        }
+
+        if (zoomSlider != null) zoomSlider.setProgress((int)(currentZoom * 10));
         startCamera();
     }
 
