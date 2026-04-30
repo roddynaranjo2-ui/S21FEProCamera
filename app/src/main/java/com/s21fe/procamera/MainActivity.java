@@ -24,6 +24,7 @@ import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
 import android.widget.Button;
 import android.widget.ImageButton;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -67,16 +68,17 @@ public class MainActivity extends AppCompatActivity {
     private static final String FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS";
     private static final int REQUEST_CODE_PERMISSIONS = 1001;
 
-    // IDs Físicos del S21 FE (Confirmados por análisis de Cameralyzer)
-    private static final String ID_WIDE = "0";       // Principal
-    private static final String ID_ULTRA_WIDE = "2"; // Ultra-Wide
-    private static final String ID_TELE = "3";       // Telephoto
+    // IDs Físicos del S21 FE
+    private static final String ID_WIDE = "0";       
+    private static final String ID_ULTRA_WIDE = "2"; 
+    private static final String ID_TELE = "3";       
 
     private PreviewView viewFinder;
     private ImageButton captureButton;
     private ImageButton switchCameraButton;
     private TextView modePhoto, modeVideo, modePro;
     private Button btnZoomOut, btnZoom1x, btnZoom3x;
+    private SeekBar zoomSlider;
     private TextView isoText, shutterText;
     
     private ImageCapture imageCapture;
@@ -121,6 +123,7 @@ public class MainActivity extends AppCompatActivity {
         btnZoomOut = findViewById(R.id.btn_zoom_out);
         btnZoom1x = findViewById(R.id.btn_zoom_1x);
         btnZoom3x = findViewById(R.id.btn_zoom_3x);
+        zoomSlider = findViewById(R.id.zoom_slider);
         isoText = findViewById(R.id.iso_text);
         shutterText = findViewById(R.id.shutter_text);
 
@@ -150,19 +153,48 @@ public class MainActivity extends AppCompatActivity {
         btnZoom1x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_WIDE, 1.0f); });
         btnZoom3x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_TELE, 3.0f); });
 
+        // Configuración del Slider de Zoom (0.6x a 30x)
+        if (zoomSlider != null) {
+            zoomSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    if (fromUser) {
+                        float zoom = progress / 10.0f;
+                        if (zoom < 0.6f) zoom = 0.6f;
+                        updateZoomFromSlider(zoom);
+                    }
+                }
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {}
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {}
+            });
+        }
+
         setupTouchToFocus();
     }
 
+    private void updateZoomFromSlider(float zoom) {
+        currentZoom = zoom;
+        if (zoom < 1.0f) targetPhysicalId = ID_ULTRA_WIDE;
+        else if (zoom < 3.0f) targetPhysicalId = ID_WIDE;
+        else targetPhysicalId = ID_TELE;
+        
+        if (cameraControl != null) {
+            cameraControl.setZoomRatio(zoom);
+        }
+        updateZoomButtonsUI(zoom);
+    }
+
     private void forceLens(String physicalId, float zoom) {
-        Log.d(TAG, "FORZADO QUIRÚRGICO: ID=" + physicalId + " ZOOM=" + zoom);
         targetPhysicalId = physicalId;
         currentZoom = zoom;
+        if (zoomSlider != null) zoomSlider.setProgress((int)(zoom * 10));
         
-        // Efecto de transición suave para ocultar el salto de hardware
         if (viewFinder != null) {
-            viewFinder.animate().alpha(0.5f).setDuration(100).withEndAction(() -> {
+            viewFinder.animate().alpha(0.7f).setDuration(80).withEndAction(() -> {
                 startCamera();
-                viewFinder.animate().alpha(1.0f).setDuration(200).start();
+                viewFinder.animate().alpha(1.0f).setDuration(150).start();
             }).start();
         } else {
             startCamera();
@@ -202,32 +234,31 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void animateShutterClick() {
-        ScaleAnimation anim = new ScaleAnimation(1f, 0.85f, 1f, 0.85f, Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
-        anim.setDuration(80);
+        ScaleAnimation anim = new ScaleAnimation(1f, 0.9f, 1f, 0.9f, Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
+        anim.setDuration(70);
         anim.setRepeatMode(Animation.REVERSE);
         anim.setRepeatCount(1);
-        anim.setInterpolator(new AccelerateDecelerateInterpolator());
         if (captureButton != null) captureButton.startAnimation(anim);
     }
 
     private void animateZoomButton(View v) {
         if (v != null) {
-            v.animate().scaleX(1.2f).scaleY(1.2f).setDuration(100).withEndAction(() -> 
-                v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(100).start()
+            v.animate().scaleX(1.1f).scaleY(1.1f).setDuration(80).withEndAction(() -> 
+                v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(80).start()
             ).start();
         }
     }
 
     private void animateRotation(View v) {
         if (v != null) {
-            v.animate().rotationBy(180f).setDuration(400).setInterpolator(new AccelerateDecelerateInterpolator()).start();
+            v.animate().rotationBy(180f).setDuration(350).setInterpolator(new AccelerateDecelerateInterpolator()).start();
         }
     }
 
     private void updateZoomButtonsUI(float ratio) {
-        if (btnZoomOut != null) btnZoomOut.setAlpha(ratio == 0.6f ? 1.0f : 0.6f);
-        if (btnZoom1x != null) btnZoom1x.setAlpha(ratio == 1.0f ? 1.0f : 0.6f);
-        if (btnZoom3x != null) btnZoom3x.setAlpha(ratio == 3.0f ? 1.0f : 0.6f);
+        if (btnZoomOut != null) btnZoomOut.setAlpha(ratio == 0.6f ? 1.0f : 0.5f);
+        if (btnZoom1x != null) btnZoom1x.setAlpha(ratio == 1.0f ? 1.0f : 0.5f);
+        if (btnZoom3x != null) btnZoom3x.setAlpha(ratio == 3.0f ? 1.0f : 0.5f);
     }
 
     private void startProDataSimulation() {
@@ -235,13 +266,13 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 if (currentMode.equals("PRO")) {
-                    int iso = 100 + (int)(Math.random() * 400);
+                    int iso = 50 + (int)(Math.random() * 800);
                     if (isoText != null) isoText.setText("ISO " + iso);
-                    if (shutterText != null) shutterText.setText("S 1/" + (125 + (int)(Math.random() * 500)));
+                    if (shutterText != null) shutterText.setText("S 1/" + (250 + (int)(Math.random() * 1000)));
                 }
-                mainHandler.postDelayed(this, 2000);
+                mainHandler.postDelayed(this, 1500);
             }
-        }, 2000);
+        }, 1500);
     }
 
     private void setupPermissions() {
@@ -268,11 +299,14 @@ public class MainActivity extends AppCompatActivity {
             try {
                 ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
                 
-                Preview preview = new Preview.Builder().build();
+                Preview preview = new Preview.Builder()
+                        .setTargetName("S26Preview")
+                        .build();
                 if (viewFinder != null) preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
 
                 imageCapture = new ImageCapture.Builder()
                         .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                        .setJpegQuality(100)
                         .build();
 
                 Recorder recorder = new Recorder.Builder()
@@ -280,7 +314,6 @@ public class MainActivity extends AppCompatActivity {
                         .build();
                 videoCapture = VideoCapture.withOutput(recorder);
 
-                // FORZADO DE ID FÍSICO EN EL SELECTOR (Nivel 1)
                 CameraSelector cameraSelector = new CameraSelector.Builder()
                         .requireLensFacing(lensFacing)
                         .build();
@@ -294,23 +327,21 @@ public class MainActivity extends AppCompatActivity {
                 
                 cameraControl = camera.getCameraControl();
                 
-                // FORZADO DE ID FÍSICO EN EL CONTROL (Nivel 2 - Camera2Interop)
+                // PROCESAMIENTO COMPUTACIONAL (ESTILO GCAM/SAMSUNG)
                 Camera2CameraControl camera2Control = Camera2CameraControl.from(cameraControl);
                 CaptureRequestOptions.Builder builder = new CaptureRequestOptions.Builder();
                 
                 if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                    // Inyectar el ID físico directamente en el flujo de captura
-                    // En Samsung S21 FE, esto es crítico para saltar la lógica de la cámara lógica
                     builder.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
-                    
-                    // Aplicar zoom como respaldo (Nivel 3)
                     cameraControl.setZoomRatio(currentZoom);
                     
-                    // Aplicar procesamiento estilo Samsung (Nivel 4)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        // Forzado de reducción de ruido y HDR computacional
                         builder.setCaptureRequestOption(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY);
                         builder.setCaptureRequestOption(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_HIGH_QUALITY);
                         builder.setCaptureRequestOption(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY);
+                        builder.setCaptureRequestOption(CaptureRequest.EDGE_MODE, CaptureRequest.EDGE_MODE_HIGH_QUALITY);
+                        builder.setCaptureRequestOption(CaptureRequest.HOT_PIXEL_MODE, CaptureRequest.HOT_PIXEL_MODE_HIGH_QUALITY);
                     }
                 }
                 
@@ -322,7 +353,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void takePhoto() {
         if (imageCapture == null) return;
-        String name = "S21FE_" + new SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis());
+        String name = "S21FE_PRO_" + new SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis());
         ContentValues contentValues = new ContentValues();
         contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
         contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
@@ -373,6 +404,7 @@ public class MainActivity extends AppCompatActivity {
         lensFacing = (lensFacing == CameraSelector.LENS_FACING_BACK) ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
         currentZoom = 1.0f;
         targetPhysicalId = ID_WIDE;
+        if (zoomSlider != null) zoomSlider.setProgress(10);
         startCamera();
     }
 

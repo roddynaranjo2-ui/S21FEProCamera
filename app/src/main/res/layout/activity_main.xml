@@ -13,16 +13,16 @@
         android:layout_height="match_parent"
         app:scaleType="fillCenter" />
 
-    <!-- Barra Superior PRO (Glassmorphism) -->
+    <!-- Barra Superior PRO (Glassmorphism Refinado) -->
     <LinearLayout
         android:id="@+id/pro_info_bar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="64dp"
+        android:layout_marginTop="56dp"
         android:background="@drawable/glass_panel_bg"
         android:orientation="horizontal"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="10dp"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="6dp"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -35,14 +35,14 @@
             android:fontFamily="sans-serif-thin"
             android:text="ISO 100"
             android:textColor="@color/white"
-            android:textSize="14sp"
-            android:letterSpacing="0.1" />
+            android:textSize="11sp"
+            android:letterSpacing="0.05" />
 
         <View
-            android:layout_width="1dp"
-            android:layout_height="14dp"
+            android:layout_width="0.5dp"
+            android:layout_height="10dp"
             android:layout_gravity="center_vertical"
-            android:layout_marginHorizontal="16dp"
+            android:layout_marginHorizontal="12dp"
             android:background="#40FFFFFF" />
 
         <TextView
@@ -52,72 +52,87 @@
             android:fontFamily="sans-serif-thin"
             android:text="S 1/125"
             android:textColor="@color/white"
-            android:textSize="14sp"
-            android:letterSpacing="0.1" />
+            android:textSize="11sp"
+            android:letterSpacing="0.05" />
     </LinearLayout>
 
-    <!-- Controles de Zoom (Estilo S26 Ultra) -->
+    <!-- Slider de Zoom Digital (30x) -->
+    <SeekBar
+        android:id="@+id/zoom_slider"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:max="300"
+        android:progress="10"
+        android:progressDrawable="@drawable/slider_track"
+        android:thumb="@drawable/slider_thumb"
+        android:splitTrack="false"
+        app:layout_constraintBottom_toTopOf="@+id/zoom_controls"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- Controles de Zoom (Botones más pequeños) -->
     <LinearLayout
         android:id="@+id/zoom_controls"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="32dp"
+        android:layout_marginBottom="24dp"
         android:background="@drawable/glass_panel_bg"
         android:orientation="horizontal"
-        android:padding="6dp"
+        android:padding="4dp"
         app:layout_constraintBottom_toTopOf="@+id/mode_selector"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_zoom_out"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:background="@drawable/zoom_button_bg"
             android:text="0.6"
             android:textAllCaps="false"
             android:textColor="@color/white"
-            android:textSize="12sp"
+            android:textSize="10sp"
             android:fontFamily="sans-serif-light" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_zoom_1x"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginHorizontal="12dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginHorizontal="8dp"
             android:background="@drawable/zoom_button_bg"
             android:text="1.0"
             android:textAllCaps="false"
             android:textColor="@color/white"
-            android:textSize="12sp"
+            android:textSize="10sp"
             android:fontFamily="sans-serif-light" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_zoom_3x"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:background="@drawable/zoom_button_bg"
             android:text="3.0"
             android:textAllCaps="false"
             android:textColor="@color/white"
-            android:textSize="12sp"
+            android:textSize="10sp"
             android:fontFamily="sans-serif-light" />
     </LinearLayout>
 
-    <!-- Panel Inferior (Estilo S26 Ultra) -->
+    <!-- Panel Inferior (Estilo S26 Ultra Refinado) -->
     <View
         android:id="@+id/bottom_panel_gradient"
         android:layout_width="match_parent"
-        android:layout_height="240dp"
+        android:layout_height="200dp"
         android:background="@drawable/bottom_panel_gradient"
         app:layout_constraintBottom_toBottomOf="parent" />
 
-    <!-- Selector de Modos (Flotante) -->
+    <!-- Selector de Modos (Más pequeño y elegante) -->
     <LinearLayout
         android:id="@+id/mode_selector"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="24dp"
+        android:layout_marginBottom="16dp"
         android:orientation="horizontal"
         app:layout_constraintBottom_toTopOf="@+id/capture_button"
         app:layout_constraintEnd_toEndOf="parent"
@@ -128,53 +143,53 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
-            android:padding="16dp"
+            android:padding="12dp"
             android:text="PRO"
             android:textColor="@color/white"
-            android:textSize="14sp"
-            android:letterSpacing="0.15" />
+            android:textSize="12sp"
+            android:letterSpacing="0.1" />
 
         <TextView
             android:id="@+id/mode_photo"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
-            android:padding="16dp"
+            android:padding="12dp"
             android:text="FOTO"
             android:textColor="@color/accent_teal"
-            android:textSize="14sp"
-            android:letterSpacing="0.15" />
+            android:textSize="12sp"
+            android:letterSpacing="0.1" />
 
         <TextView
             android:id="@+id/mode_video"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:fontFamily="sans-serif-medium"
-            android:padding="16dp"
+            android:padding="12dp"
             android:text="VIDEO"
             android:textColor="@color/white"
-            android:textSize="14sp"
-            android:letterSpacing="0.15" />
+            android:textSize="12sp"
+            android:letterSpacing="0.1" />
     </LinearLayout>
 
-    <!-- Botón de Captura (S26 Ultra Shutter) -->
+    <!-- Botón de Captura (Refinado) -->
     <ImageButton
         android:id="@+id/capture_button"
-        android:layout_width="88dp"
-        android:layout_height="88dp"
-        android:layout_marginBottom="48dp"
+        android:layout_width="76dp"
+        android:layout_height="76dp"
+        android:layout_marginBottom="40dp"
         android:background="@drawable/s26_shutter_bg"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Cambio de Cámara (Minimalista) -->
+    <!-- Cambio de Cámara -->
     <ImageButton
         android:id="@+id/switch_camera_button"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:background="@drawable/glass_panel_bg"
-        android:padding="14dp"
+        android:padding="12dp"
         android:scaleType="centerInside"
         android:src="@android:drawable/ic_menu_rotate"
         app:layout_constraintBottom_toBottomOf="@+id/capture_button"
@@ -183,11 +198,11 @@
         app:layout_constraintTop_toTopOf="@+id/capture_button"
         app:tint="@color/white" />
 
-    <!-- Galería (Circular Glass) -->
+    <!-- Galería -->
     <View
         android:id="@+id/gallery_preview"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:background="@drawable/glass_panel_bg"
         app:layout_constraintBottom_toBottomOf="@+id/capture_button"
         app:layout_constraintEnd_toStartOf="@+id/capture_button"
