@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -12,7 +13,9 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.MediaStore;
 import android.util.Log;
-import android.view.HapticFeedbackConstants;
+import android.view.View;
+import android.view.animation.Animation;
+import android.view.animation.ScaleAnimation;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.TextView;
@@ -58,7 +61,7 @@ public class MainActivity extends AppCompatActivity {
     private PreviewView viewFinder;
     private ImageButton captureButton;
     private ImageButton switchCameraButton;
-    private TextView modeSelector;
+    private TextView modePhoto, modeVideo, modePro;
     private Button btnZoomOut, btnZoom1x, btnZoom3x;
     
     private ImageCapture imageCapture;
@@ -70,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
     private String currentMode = "PHOTO";
     
     private ExecutorService cameraExecutor;
+    private Vibrator vibrator;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     static {
@@ -81,6 +85,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
         initViews();
         setupPermissions();
         cameraExecutor = Executors.newFixedThreadPool(4);
@@ -90,50 +95,67 @@ public class MainActivity extends AppCompatActivity {
         viewFinder = findViewById(R.id.viewFinder);
         captureButton = findViewById(R.id.capture_button);
         switchCameraButton = findViewById(R.id.switch_camera_button);
-        modeSelector = findViewById(R.id.mode_selector);
+        
+        // Selector de modos individual para mejor control de color
+        modePhoto = findViewById(R.id.mode_photo);
+        modeVideo = findViewById(R.id.mode_video);
+        modePro = findViewById(R.id.mode_pro);
+
         btnZoomOut = findViewById(R.id.btn_zoom_out);
         btnZoom1x = findViewById(R.id.btn_zoom_1x);
         btnZoom3x = findViewById(R.id.btn_zoom_3x);
 
+        updateModeUI();
+
         captureButton.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            vibrate(50);
             if (currentMode.equals("VIDEO")) {
                 captureVideo();
             } else {
-                animateCapture();
+                animateButtonClick();
                 takePhoto();
             }
         });
 
-        switchCameraButton.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-            toggleCamera();
-        });
+        modePhoto.setOnClickListener(v -> { currentMode = "PHOTO"; updateModeUI(); startCamera(); vibrate(30); });
+        modeVideo.setOnClickListener(v -> { currentMode = "VIDEO"; updateModeUI(); startCamera(); vibrate(30); });
+        modePro.setOnClickListener(v -> { currentMode = "PRO"; updateModeUI(); startCamera(); vibrate(30); });
 
-        modeSelector.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-            switch (currentMode) {
-                case "PHOTO":
-                    currentMode = "VIDEO";
-                    modeSelector.setText("PHOTO   [VIDEO]   PRO");
-                    break;
-                case "VIDEO":
-                    currentMode = "PRO";
-                    modeSelector.setText("PHOTO   VIDEO   [PRO]");
-                    break;
-                case "PRO":
-                    currentMode = "PHOTO";
-                    modeSelector.setText("[PHOTO]   VIDEO   PRO");
-                    break;
-            }
-            startCamera();
-        });
+        switchCameraButton.setOnClickListener(v -> { vibrate(40); toggleCamera(); });
 
-        btnZoomOut.setOnClickListener(v -> { v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); setZoom(0.6f); });
-        btnZoom1x.setOnClickListener(v -> { v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); setZoom(1.0f); });
-        btnZoom3x.setOnClickListener(v -> { v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); setZoom(3.0f); });
+        btnZoomOut.setOnClickListener(v -> { vibrate(20); setZoom(0.6f); });
+        btnZoom1x.setOnClickListener(v -> { vibrate(20); setZoom(1.0f); });
+        btnZoom3x.setOnClickListener(v -> { vibrate(20); setZoom(3.0f); });
 
         setupTouchToFocus();
+    }
+
+    private void updateModeUI() {
+        int activeColor = Color.parseColor("#03DAC5"); // Verde azulado
+        int inactiveColor = Color.WHITE;
+
+        modePhoto.setTextColor(currentMode.equals("PHOTO") ? activeColor : inactiveColor);
+        modeVideo.setTextColor(currentMode.equals("VIDEO") ? activeColor : inactiveColor);
+        modePro.setTextColor(currentMode.equals("PRO") ? activeColor : inactiveColor);
+    }
+
+    private void vibrate(long duration) {
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                vibrator.vibrate(duration);
+            }
+        }
+    }
+
+    private void animateButtonClick() {
+        ScaleAnimation anim = new ScaleAnimation(1f, 0.9f, 1f, 0.9f, 
+                Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
+        anim.setDuration(100);
+        anim.setRepeatMode(Animation.REVERSE);
+        anim.setRepeatCount(1);
+        captureButton.startAnimation(anim);
     }
 
     private void setZoom(float ratio) {
@@ -253,17 +275,10 @@ public class MainActivity extends AppCompatActivity {
                 .start(ContextCompat.getMainExecutor(this), recordEvent -> {
                     if (recordEvent instanceof VideoRecordEvent.Start) {
                         captureButton.setBackgroundTintList(ContextCompat.getColorStateList(this, android.R.color.holo_red_light));
+                        // Animación de grabación (pestañeo o escala)
                     } else if (recordEvent instanceof VideoRecordEvent.Finalize) {
                         captureButton.setBackgroundTintList(null);
-                        if (!((VideoRecordEvent.Finalize) recordEvent).hasError()) {
-                            Log.d(TAG, "Video saved");
-                        } else {
-                            if (recording != null) {
-                                recording.stop();
-                                recording = null;
-                            }
-                            Log.e(TAG, "Video error");
-                        }
+                        vibrate(100);
                     }
                 });
     }
@@ -282,14 +297,9 @@ public class MainActivity extends AppCompatActivity {
             FocusMeteringAction action = new FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
                     .setAutoCancelDuration(3, TimeUnit.SECONDS).build();
             if (cameraControl != null) cameraControl.startFocusAndMetering(action);
-            v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+            vibrate(20);
             return true;
         });
-    }
-
-    private void animateCapture() {
-        viewFinder.setAlpha(0.5f);
-        mainHandler.postDelayed(() -> viewFinder.setAlpha(1.0f), 50);
     }
 
     @Override
