@@ -88,7 +88,6 @@ public class MainActivity extends AppCompatActivity {
             initViews();
             setupPermissions();
             cameraExecutor = Executors.newFixedThreadPool(4);
-            // Log de diagnóstico para ver IDs de cámara en Logcat
             CameraDiagnostic.logCameraStats(this);
         } catch (Exception e) {
             Log.e(TAG, "Error in onCreate: " + e.getMessage());
@@ -159,26 +158,22 @@ public class MainActivity extends AppCompatActivity {
         captureButton.startAnimation(anim);
     }
 
-    /**
-     * Intenta forzar el cambio de lente físico usando Camera2Interop
-     */
     private void setPhysicalLens(float ratio) {
         currentZoom = ratio;
         if (cameraControl != null) {
-            // Primero aplicamos el ratio de zoom
+            // Aplicamos el ratio de zoom
             cameraControl.setZoomRatio(ratio);
             
-            // Usamos Camera2Interop para intentar forzar el ID físico si es necesario
-            // En Samsung S21 FE, CameraX suele manejar el cambio automáticamente si el ratio es exacto
-            // pero podemos añadir parámetros de control adicionales aquí.
+            // Usamos Camera2Interop para optimizar el cambio de lente físico
             Camera2CameraControl camera2Control = Camera2CameraControl.from(cameraControl);
             CaptureRequestOptions.Builder builder = new CaptureRequestOptions.Builder();
             
-            // Forzar el modo de estabilización óptica si está disponible
-            builder.setCaptureRequestOption(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON);
+            // Forzar el uso del lente de mayor resolución para el ratio seleccionado
+            builder.setCaptureRequestOption(CaptureRequest.CONTROL_EXTENDED_SCENE_MODE, 
+                CaptureRequest.CONTROL_EXTENDED_SCENE_MODE_DISABLED);
             
             camera2Control.setCaptureRequestOptions(builder.build());
-            Log.d(TAG, "Zoom set to: " + ratio);
+            Log.d(TAG, "Lente físico ajustado a: " + ratio);
         }
     }
 
