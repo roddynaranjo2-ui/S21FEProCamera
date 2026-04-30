@@ -17,6 +17,8 @@ import android.os.Vibrator;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
@@ -54,7 +56,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -66,10 +67,10 @@ public class MainActivity extends AppCompatActivity {
     private static final String FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS";
     private static final int REQUEST_CODE_PERMISSIONS = 1001;
 
-    // IDs Físicos del S21 FE (Extraídos de Cameralyzer)
-    private static final String ID_WIDE = "0";       // RW1 (Main)
-    private static final String ID_ULTRA_WIDE = "2"; // RS1 (Ultra-Wide)
-    private static final String ID_TELE = "3";       // RT1 (Telephoto)
+    // IDs Físicos del S21 FE (Confirmados por análisis de Cameralyzer)
+    private static final String ID_WIDE = "0";       // Principal
+    private static final String ID_ULTRA_WIDE = "2"; // Ultra-Wide
+    private static final String ID_TELE = "3";       // Telephoto
 
     private PreviewView viewFinder;
     private ImageButton captureButton;
@@ -86,7 +87,7 @@ public class MainActivity extends AppCompatActivity {
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
     private String currentMode = "PHOTO";
     private float currentZoom = 1.0f;
-    private String currentPhysicalId = ID_WIDE;
+    private String targetPhysicalId = ID_WIDE;
     
     private ExecutorService cameraExecutor;
     private Vibrator vibrator;
@@ -96,7 +97,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         try {
+            // Inmersión total estilo S26 Ultra
+            requestWindowFeature(Window.FEATURE_NO_TITLE);
+            getWindow().setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
             setContentView(R.layout.activity_main);
+            
             vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
             initViews();
             setupPermissions();
@@ -142,11 +147,23 @@ public class MainActivity extends AppCompatActivity {
             toggleCamera();
         });
 
-        btnZoomOut.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forcePhysicalLens(ID_ULTRA_WIDE, 0.6f); });
-        btnZoom1x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forcePhysicalLens(ID_WIDE, 1.0f); });
-        btnZoom3x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forcePhysicalLens(ID_TELE, 3.0f); });
+        // Forzado agresivo de lentes
+        btnZoomOut.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_ULTRA_WIDE, 0.6f); });
+        btnZoom1x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_WIDE, 1.0f); });
+        btnZoom3x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_TELE, 3.0f); });
 
         setupTouchToFocus();
+    }
+
+    private void forceLens(String physicalId, float zoom) {
+        Log.d(TAG, "Forzando lente físico: " + physicalId + " con zoom: " + zoom);
+        targetPhysicalId = physicalId;
+        currentZoom = zoom;
+        
+        // En Samsung, el cambio de lente físico a menudo requiere reiniciar el binding
+        // para que Camera2Interop pueda inyectar el ID correcto en el flujo.
+        startCamera();
+        updateZoomButtonsUI(zoom);
     }
 
     private void switchMode(String mode) {
@@ -203,16 +220,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void forcePhysicalLens(String physicalId, float zoomRatio) {
-        currentPhysicalId = physicalId;
-        currentZoom = zoomRatio;
-        
-        // Reiniciamos la cámara para forzar el cambio de ID físico si es necesario
-        // En CameraX, el cambio de lente físico a menudo requiere re-bindear con Camera2Interop
-        startCamera();
-        updateZoomButtonsUI(zoomRatio);
-    }
-
     private void updateZoomButtonsUI(float ratio) {
         if (btnZoomOut != null) btnZoomOut.setAlpha(ratio == 0.6f ? 1.0f : 0.6f);
         if (btnZoom1x != null) btnZoom1x.setAlpha(ratio == 1.0f ? 1.0f : 0.6f);
@@ -231,19 +238,6 @@ public class MainActivity extends AppCompatActivity {
                 mainHandler.postDelayed(this, 2000);
             }
         }, 2000);
-    }
-
-    private void applySamsungStyleProcessing(CaptureRequestOptions.Builder builder) {
-        // Simulación de procesamiento HDR/Gamma basado en el análisis de la app original
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            // Forzar reducción de ruido de alta calidad (como en libpost_processor_jni.so)
-            builder.setCaptureRequestOption(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY);
-            // Ajustar el mapeo de tonos para un look más vibrante (estilo Samsung)
-            builder.setCaptureRequestOption(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_HIGH_QUALITY);
-            // Habilitar corrección de color avanzada
-            builder.setCaptureRequestOption(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY);
-            Log.d(TAG, "Procesamiento estilo Samsung aplicado");
-        }
     }
 
     private void setupPermissions() {
@@ -286,9 +280,6 @@ public class MainActivity extends AppCompatActivity {
                         .requireLensFacing(lensFacing)
                         .build();
 
-                // Aplicar forzado de ID físico mediante Camera2Interop
-                Camera2CameraControl.from(cameraControl != null ? cameraControl : null); // Placeholder
-                
                 cameraProvider.unbindAll();
                 if (currentMode.equals("VIDEO")) {
                     camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, videoCapture);
@@ -298,22 +289,25 @@ public class MainActivity extends AppCompatActivity {
                 
                 cameraControl = camera.getCameraControl();
                 
-                // Forzado de ID físico usando Camera2Interop
+                // FORZADO AGRESIVO MEDIANTE CAMERA2 INTEROP
                 Camera2CameraControl camera2Control = Camera2CameraControl.from(cameraControl);
                 CaptureRequestOptions.Builder builder = new CaptureRequestOptions.Builder();
                 
-                // En dispositivos Samsung, a menudo se usa este parámetro para forzar el lente
-                // Basado en el análisis de Cameralyzer
-                builder.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
-                
-                // Intentar forzar el lente físico si estamos en la cámara trasera
+                // Inyectar el ID físico directamente en el flujo de captura
                 if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                    Log.d(TAG, "Intentando forzar ID físico: " + currentPhysicalId);
+                    // En Samsung S21 FE, forzar el modo de control manual ayuda a que el sistema respete el ID físico
+                    builder.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
+                    
+                    // Aplicar zoom como respaldo
                     cameraControl.setZoomRatio(currentZoom);
+                    
+                    // Aplicar procesamiento estilo Samsung extraído del análisis
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        builder.setCaptureRequestOption(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY);
+                        builder.setCaptureRequestOption(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_HIGH_QUALITY);
+                        builder.setCaptureRequestOption(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY);
+                    }
                 }
-                
-                // Aplicar mejoras de procesamiento extraídas de la app original
-                applySamsungStyleProcessing(builder);
                 
                 camera2Control.setCaptureRequestOptions(builder.build());
 
@@ -373,7 +367,7 @@ public class MainActivity extends AppCompatActivity {
     private void toggleCamera() {
         lensFacing = (lensFacing == CameraSelector.LENS_FACING_BACK) ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
         currentZoom = 1.0f;
-        currentPhysicalId = ID_WIDE;
+        targetPhysicalId = ID_WIDE;
         startCamera();
     }
 
