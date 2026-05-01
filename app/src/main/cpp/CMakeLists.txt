@@ -1,10 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 project("procamera")
 
-# Set OpenCV directory using an absolute-like path relative to the project root
 set(OpenCV_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../opencv/sdk/native/jni")
-
-# Find OpenCV
 find_package(OpenCV REQUIRED)
 
 add_library(
@@ -13,7 +10,6 @@ add_library(
         native-lib.cpp
         hdr_processor.cpp
         image_processor.cpp
-        denoise_processor.cpp
 )
 
 find_library(
