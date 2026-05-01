@@ -1,14 +1,14 @@
 apply plugin: 'com.android.library'
 
 android {
-    compileSdkVersion 34
+    namespace 'org.opencv'
+    compileSdk 34
+
     defaultConfig {
-        minSdkVersion 21
-        targetSdkVersion 34
+        minSdk 21
+        targetSdk 34
         versionCode 4100
         versionName "4.10.0"
-
-        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
 
         externalNativeBuild {
             cmake {
@@ -32,16 +32,14 @@ android {
 
     sourceSets {
         main {
-            jni.srcDirs = [jni.srcDirs, 'src/sdk/native/jni/include']
-            jniLibs.srcDirs = [jniLibs.srcDirs, 'src/sdk/native/3rdparty/libs', 'src/sdk/native/libs']
+            java.srcDirs = ['src/main/java']
+            aidl.srcDirs = ['src/main/aidl']
+            res.srcDirs = ['src/main/res']
+            jniLibs.srcDirs = ['sdk/native/libs']
         }
     }
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation 'com.android.support:appcompat-v7:28.0.0'
-    testImplementation 'junit:junit:4.12'
-    androidTestImplementation 'com.android.support.test:runner:1.0.2'
-    androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
 }
