@@ -30,6 +30,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.camera2.interop.Camera2CameraControl;
 import androidx.camera.camera2.interop.Camera2CameraInfo;
+import androidx.camera.core.CameraInfo;
 import androidx.camera.camera2.interop.CaptureRequestOptions;
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import androidx.camera.core.Camera;
@@ -364,13 +365,15 @@ public class MainActivity extends AppCompatActivity {
 
                 CameraSelector cameraSelector = new CameraSelector.Builder()
                     .requireLensFacing(lensFacing)
-                    .addCameraFilter(cameraInfo -> {
-                        List<CameraInfo> filteredCameraInfo = new ArrayList<>();
-                        Camera2CameraInfo camera2CameraInfo = Camera2CameraInfo.from(cameraInfo);
-                        if (camera2CameraInfo.getPhysicalCameraId().equals(targetPhysicalId)) {
-                            filteredCameraInfo.add(cameraInfo);
+                    .addCameraFilter(cameraInfos -> {
+                        List<androidx.camera.core.CameraInfo> filtered = new ArrayList<>();
+                        for (androidx.camera.core.CameraInfo info : cameraInfos) {
+                            String physicalId = Camera2CameraInfo.from(info).getPhysicalId();
+                            if (physicalId.equals(targetPhysicalId)) {
+                                filtered.add(info);
+                            }
                         }
-                        return filteredCameraInfo;
+                        return filtered;
                     })
                     .build();
 
