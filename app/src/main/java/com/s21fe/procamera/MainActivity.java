@@ -2,24 +2,18 @@ package com.s21fe.procamera;
 
 import android.Manifest;
 import android.animation.ObjectAnimator;
-import android.content.ContentValues;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CaptureRequest;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
-import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
 import android.widget.Button;
@@ -28,12 +22,11 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.List;
+import java.lang.reflect.Method;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.camera.camera2.interop.Camera2CameraControl;
 import androidx.camera.camera2.interop.Camera2CameraInfo;
-import androidx.camera.camera2.interop.CaptureRequestOptions;
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraControl;
@@ -47,13 +40,10 @@ import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
-import androidx.camera.video.MediaStoreOutputOptions;
 import androidx.camera.video.Quality;
 import androidx.camera.video.QualitySelector;
 import androidx.camera.video.Recorder;
-import androidx.camera.video.Recording;
 import androidx.camera.video.VideoCapture;
-import androidx.camera.video.VideoRecordEvent;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -69,7 +59,6 @@ public class MainActivity extends AppCompatActivity {
     private Preview preview;
     private ImageCapture imageCapture;
     private VideoCapture<Recorder> videoCapture;
-    private Recording recording;
     private Camera camera;
     private CameraControl cameraControl;
     private ProcessCameraProvider cameraProvider;
@@ -81,7 +70,6 @@ public class MainActivity extends AppCompatActivity {
     private SeekBar zoomSlider;
     private TextView txtZoomInfo, txtProData;
 
-    private String currentMode = "PHOTO";
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
     private String targetPhysicalId = ID_WIDE;
     private String currentlyBoundPhysicalId = "";
@@ -97,6 +85,7 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.activity_main);
 
+        // Sincronización exacta con activity_main.xml
         viewFinder = findViewById(R.id.viewFinder);
         btnShutter = findViewById(R.id.capture_button);
         btnSwitch = findViewById(R.id.switch_camera_button);
@@ -105,7 +94,7 @@ public class MainActivity extends AppCompatActivity {
         btnZoom1x = findViewById(R.id.btn_zoom_1x);
         btnZoom3x = findViewById(R.id.btn_zoom_3x);
         zoomSlider = findViewById(R.id.zoom_slider);
-        txtZoomInfo = findViewById(R.id.iso_text); // Usando iso_text temporalmente para info de zoom
+        txtZoomInfo = findViewById(R.id.iso_text); 
         txtProData = findViewById(R.id.shutter_text);
 
         setupPermissions();
@@ -197,16 +186,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void switchMode(String mode) {
-        currentMode = mode;
-        updateModeUI();
-        startCamera();
-    }
-
-    private void updateModeUI() {
-        // Implementación de UI para cambio de modo
-    }
-
     private void safeVibrate(long duration) {
         try {
             Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
@@ -289,7 +268,7 @@ public class MainActivity extends AppCompatActivity {
                     .addCameraFilter(cameraInfos -> {
                         List<CameraInfo> filtered = new ArrayList<>();
                         for (CameraInfo info : cameraInfos) {
-                            String physicalId = Camera2CameraInfo.from(info).getPhysicalId();
+                            String physicalId = getPhysicalIdRobust(info);
                             if (physicalId != null && physicalId.equals(targetPhysicalId)) {
                                 filtered.add(info);
                             }
@@ -305,6 +284,29 @@ public class MainActivity extends AppCompatActivity {
 
             } catch (Exception e) { Log.e(TAG, "Error camera binding", e); }
         }, ContextCompat.getMainExecutor(this));
+    }
+
+    // SOLUCIÓN MAESTRA: Detección robusta del ID físico mediante reflexión
+    private String getPhysicalIdRobust(CameraInfo info) {
+        try {
+            Camera2CameraInfo c2Info = Camera2CameraInfo.from(info);
+            // Intentar getPhysicalId()
+            try {
+                Method m = c2Info.getClass().getMethod("getPhysicalId");
+                return (String) m.invoke(c2Info);
+            } catch (Exception e1) {
+                // Intentar getPhysicalCameraId()
+                try {
+                    Method m = c2Info.getClass().getMethod("getPhysicalCameraId");
+                    return (String) m.invoke(c2Info);
+                } catch (Exception e2) {
+                    Log.e(TAG, "No se pudo encontrar el método para obtener el ID físico");
+                    return null;
+                }
+            }
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void takePhoto() {
