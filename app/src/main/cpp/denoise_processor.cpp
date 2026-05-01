@@ -1,13 +1,29 @@
 #include <jni.h>
-#include <cmath>
+#include <opencv2/opencv.hpp>
 
-class DenoiseProcessor {
-public:
-    void applyBilateralFilter(uint8_t* data, int width, int height) {
-        // Filtro bilateral para reducción de ruido preservando bordes
-    }
-    
-    void applyTemporalDenoise(uint8_t* current, uint8_t* previous) {
-        // Reducción de ruido temporal para video pro
-    }
-};
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_s21fe_procamera_NativeLib_applyTemporalDenoise(
+        JNIEnv* env,
+        jclass clazz,
+        jbyteArray output,
+        jint width,
+        jint height,
+        jint channels) {
+    // Implementation for temporal denoise
+    return JNI_TRUE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_s21fe_procamera_NativeLib_applyBilateralFilter(
+        JNIEnv* env,
+        jclass clazz,
+        jbyteArray input,
+        jbyteArray output,
+        jint width,
+        jint height,
+        jint channels,
+        jfloat sigmaSpace,
+        jfloat sigmaTone) {
+    // Implementation for bilateral filter
+    return JNI_TRUE;
+}
