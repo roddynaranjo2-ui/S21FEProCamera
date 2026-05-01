@@ -21,6 +21,7 @@ public class BurstCaptureManager {
     private int targetFrameCount;
     private BurstCaptureCallback callback;
     private volatile int currentFrameCount = 0;
+    private volatile boolean isCancelled = false;
 
     public interface BurstCaptureCallback {
         void onFrameCaptured(int frameNumber, int totalFrames);
@@ -42,20 +43,25 @@ public class BurstCaptureManager {
         this.targetFrameCount = frameCount;
         this.callback = callback;
         this.currentFrameCount = 0;
+        this.isCancelled = false;
         this.capturedFrames.clear();
         captureNextFrame();
     }
 
     private void captureNextFrame() {
-        if (currentFrameCount >= targetFrameCount) {
-            if (callback != null) callback.onBurstComplete(new ArrayList<>(capturedFrames));
+        if (isCancelled || currentFrameCount >= targetFrameCount) {
+            if (callback != null && !isCancelled) callback.onBurstComplete(new ArrayList<>(capturedFrames));
             return;
         }
 
         imageCapture.takePicture(executor, new ImageCapture.OnImageCapturedCallback() {
             @Override
             public void onCaptureSuccess(ImageProxy image) {
-                capturedFrames.add(image); // We keep the ImageProxy open to process it later
+                if (isCancelled) {
+                    image.close();
+                    return;
+                }
+                capturedFrames.add(image);
                 currentFrameCount++;
                 if (callback != null) callback.onFrameCaptured(currentFrameCount, targetFrameCount);
                 
@@ -68,9 +74,14 @@ public class BurstCaptureManager {
 
             @Override
             public void onError(ImageCaptureException exception) {
-                if (callback != null) callback.onError(exception.getMessage());
+                if (callback != null && !isCancelled) callback.onError(exception.getMessage());
             }
         });
+    }
+
+    public void cancelBurstCapture() {
+        isCancelled = true;
+        clearCapturedFrames();
     }
 
     public void clearCapturedFrames() {

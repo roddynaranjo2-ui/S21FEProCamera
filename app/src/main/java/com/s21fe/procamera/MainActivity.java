@@ -1,4 +1,6 @@
 package com.s21fe.procamera;
+import java.util.ArrayList;
+import java.util.List;
 
 import android.Manifest;
 import android.animation.ObjectAnimator;
@@ -55,25 +57,19 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-
 @ExperimentalCamera2Interop
 public class MainActivity extends AppCompatActivity {
-
     private static final String TAG = "S21FEProCamera";
     private static final String FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS";
     private static final int REQUEST_CODE_PERMISSIONS = 1001;
-
     // IDs Físicos del S21 FE
     private static final String ID_WIDE = "0";       
     private static final String ID_ULTRA_WIDE = "2"; 
     private static final String ID_TELE = "3";       
-
     private PreviewView viewFinder;
     private ImageButton captureButton;
     private ImageButton switchCameraButton;
@@ -96,11 +92,9 @@ public class MainActivity extends AppCompatActivity {
     private String targetPhysicalId = ID_WIDE;
     private String currentlyBoundPhysicalId = ID_WIDE;
     private ProcessCameraProvider cameraProvider;
-    
     private ExecutorService cameraExecutor;
     private Vibrator vibrator;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -126,7 +120,6 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "Error in onCreate: " + e.getMessage());
         }
     }
-
     private void initViews() {
         viewFinder = findViewById(R.id.viewFinder);
         captureButton = findViewById(R.id.capture_button);
@@ -140,9 +133,7 @@ public class MainActivity extends AppCompatActivity {
         zoomSlider = findViewById(R.id.zoom_slider);
         isoText = findViewById(R.id.iso_text);
         shutterText = findViewById(R.id.shutter_text);
-
         updateModeUI();
-
         captureButton.setOnClickListener(v -> {
             safeVibrate(50);
             if (currentMode.equals("VIDEO")) {
@@ -152,21 +143,16 @@ public class MainActivity extends AppCompatActivity {
                 takePhoto();
             }
         });
-
         modePhoto.setOnClickListener(v -> switchMode("PHOTO"));
         modeVideo.setOnClickListener(v -> switchMode("VIDEO"));
         modePro.setOnClickListener(v -> switchMode("PRO"));
-
         switchCameraButton.setOnClickListener(v -> {
             animateRotation(v);
             safeVibrate(40);
             toggleCamera();
-        });
-
         btnZoomOut.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_ULTRA_WIDE, 0.6f); });
         btnZoom1x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_WIDE, 1.0f); });
         btnZoom3x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_TELE, 3.0f); });
-
         // Configuración del Slider de Zoom (0.6x a 30x)
         if (zoomSlider != null) {
             zoomSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -177,46 +163,33 @@ public class MainActivity extends AppCompatActivity {
                         if (zoom < 0.6f) zoom = 0.6f;
                         updateZoomFromSlider(zoom);
                     }
-                }
-                @Override
                 public void onStartTrackingTouch(SeekBar seekBar) {}
-                @Override
                 public void onStopTrackingTouch(SeekBar seekBar) {}
             });
-        }
-
         setupTouchToFocus();
-    }
-
     private void updateZoomFromSlider(float zoom) {
         currentZoom = zoom;
         String newTargetPhysicalId = targetPhysicalId;
         if (zoom < 1.0f) newTargetPhysicalId = ID_ULTRA_WIDE;
         else if (zoom < 3.0f) newTargetPhysicalId = ID_WIDE;
         else newTargetPhysicalId = ID_TELE;
-
         if (!newTargetPhysicalId.equals(targetPhysicalId)) {
             targetPhysicalId = newTargetPhysicalId;
             startCamera(); // Re-bind si el lente físico cambia
         } else {
             if (cameraControl != null) {
                 cameraControl.setZoomRatio(zoom);
-            }
-        }
         // Guardar el zoom para el lente actual
         if (targetPhysicalId.equals(ID_ULTRA_WIDE)) currentZoomUltraWide = zoom;
         else if (targetPhysicalId.equals(ID_WIDE)) currentZoomWide = zoom;
         else if (targetPhysicalId.equals(ID_TELE)) currentZoomTele = zoom;
         updateZoomButtonsUI(currentZoom);
-    }
-
     private void forceLens(String physicalId, float zoom) {
         targetPhysicalId = physicalId;
         // Recuperar el zoom guardado para este lente
         if (targetPhysicalId.equals(ID_ULTRA_WIDE)) currentZoom = currentZoomUltraWide;
         else if (targetPhysicalId.equals(ID_WIDE)) currentZoom = currentZoomWide;
         else if (targetPhysicalId.equals(ID_TELE)) currentZoom = currentZoomTele;
-
         if (zoomSlider != null) zoomSlider.setProgress((int)(currentZoom * 10));
         
         // Si el lente físico objetivo es diferente al actualmente enlazado, entonces necesitamos re-bindear.
@@ -224,79 +197,47 @@ public class MainActivity extends AppCompatActivity {
         if (!currentlyBoundPhysicalId.equals(physicalId)) {
             if (viewFinder != null) {
                 viewFinder.animate().alpha(0.7f).setDuration(80).withEndAction(() -> {
-                    startCamera();
                     viewFinder.animate().alpha(1.0f).setDuration(150).start();
                 }).start();
-            } else {
                 startCamera();
-            }
-        } else {
-            if (cameraControl != null) {
                 cameraControl.setZoomRatio(currentZoom);
-            }
-        }
-        updateZoomButtonsUI(currentZoom);
-    }
-
     private void switchMode(String mode) {
         if (currentMode.equals(mode)) return;
         currentMode = mode;
-        updateModeUI();
         startCamera();
         safeVibrate(30);
-    }
-
     private void updateModeUI() {
         int activeColor = Color.parseColor("#03DAC5");
         int inactiveColor = Color.WHITE;
         if (modePhoto != null) modePhoto.setTextColor(currentMode.equals("PHOTO") ? activeColor : inactiveColor);
         if (modeVideo != null) modeVideo.setTextColor(currentMode.equals("VIDEO") ? activeColor : inactiveColor);
         if (modePro != null) modePro.setTextColor(currentMode.equals("PRO") ? activeColor : inactiveColor);
-        
         View infoBar = findViewById(R.id.pro_info_bar);
         if (infoBar != null) infoBar.setVisibility(currentMode.equals("PRO") ? View.VISIBLE : View.GONE);
-    }
-
     private void safeVibrate(long duration) {
-        try {
             if (vibrator != null && vibrator.hasVibrator()) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE));
                 } else {
                     vibrator.vibrate(duration);
-                }
-            }
         } catch (Exception e) { Log.e(TAG, "Vibration error", e); }
-    }
-
     private void animateShutterClick() {
         ScaleAnimation anim = new ScaleAnimation(1f, 0.9f, 1f, 0.9f, Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
         anim.setDuration(70);
         anim.setRepeatMode(Animation.REVERSE);
         anim.setRepeatCount(1);
         if (captureButton != null) captureButton.startAnimation(anim);
-    }
-
     private void animateZoomButton(View v) {
         if (v != null) {
             v.animate().scaleX(1.1f).scaleY(1.1f).setDuration(80).withEndAction(() -> 
                 v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(80).start()
             ).start();
-        }
-    }
-
     private void animateRotation(View v) {
-        if (v != null) {
             v.animate().rotationBy(180f).setDuration(350).setInterpolator(new AccelerateDecelerateInterpolator()).start();
-        }
-    }
-
     private void updateZoomButtonsUI(float ratio) {
         if (btnZoomOut != null) btnZoomOut.setAlpha(ratio == 0.6f ? 1.0f : 0.5f);
         if (btnZoom1x != null) btnZoom1x.setAlpha(ratio == 1.0f ? 1.0f : 0.5f);
         if (btnZoom3x != null) btnZoom3x.setAlpha(ratio == 3.0f ? 1.0f : 0.5f);
-    }
-
     private void startProDataSimulation() {
         mainHandler.postDelayed(new Runnable() {
             @Override
@@ -305,46 +246,26 @@ public class MainActivity extends AppCompatActivity {
                     int iso = 50 + (int)(Math.random() * 800);
                     if (isoText != null) isoText.setText("ISO " + iso);
                     if (shutterText != null) shutterText.setText("S 1/" + (250 + (int)(Math.random() * 1000)));
-                }
                 mainHandler.postDelayed(this, 1500);
-            }
         }, 1500);
-    }
-
     private void setupPermissions() {
         List<String> permissions = new ArrayList<>();
         permissions.add(Manifest.permission.CAMERA);
         permissions.add(Manifest.permission.RECORD_AUDIO);
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-
         List<String> listPermissionsNeeded = new ArrayList<>();
         for (String p : permissions) {
             if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) listPermissionsNeeded.add(p);
-        }
-
         if (!listPermissionsNeeded.isEmpty()) {
             ActivityCompat.requestPermissions(this, listPermissionsNeeded.toArray(new String[0]), REQUEST_CODE_PERMISSIONS);
-        } else {
             startCamera();
-        }
-    }
-
     private void startCamera() {
         if (cameraProvider == null) {
             Log.e(TAG, "CameraProvider not initialized.");
             return;
-        }
-
         // Solo re-bind si el lente físico ha cambiado
         if (currentlyBoundPhysicalId.equals(targetPhysicalId) && camera != null) {
             // Si el lente físico es el mismo, solo actualizamos el zoom si es necesario
-            if (cameraControl != null) {
-                cameraControl.setZoomRatio(currentZoom);
-            }
-            return;
-        }
-
-        try {
             cameraProvider.unbindAll();
             currentlyBoundPhysicalId = targetPhysicalId;
                 
@@ -352,23 +273,18 @@ public class MainActivity extends AppCompatActivity {
                         .setTargetName("S26Preview")
                         .build();
                 if (viewFinder != null) preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
-
                 imageCapture = new ImageCapture.Builder()
                         .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                         .setJpegQuality(100)
-                        .build();
-
                 Recorder recorder = new Recorder.Builder()
                         .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
-                        .build();
                 videoCapture = VideoCapture.withOutput(recorder);
-
                 CameraSelector cameraSelector = new CameraSelector.Builder()
                     .requireLensFacing(lensFacing)
                     .addCameraFilter(cameraInfos -> {
                         List<androidx.camera.core.CameraInfo> filtered = new ArrayList<>();
                         for (androidx.camera.core.CameraInfo info : cameraInfos) {
-                            String physicalId = Camera2CameraInfo.from(info).getPhysicalId();
+                            String physicalId = Camera2CameraInfo.from(info).getPhysicalCameraId();
                             if (physicalId.equals(targetPhysicalId)) {
                                 filtered.add(info);
                             }
@@ -376,20 +292,14 @@ public class MainActivity extends AppCompatActivity {
                         return filtered;
                     })
                     .build();
-
                 if (currentMode.equals("VIDEO")) {
                     camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, videoCapture);
-                } else {
                     camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture);
-                }
-                
                 cameraControl = camera.getCameraControl();
                 cameraControl.setZoomRatio(currentZoom); // Aplicar el zoom guardado al re-bind
-                
                 // PROCESAMIENTO COMPUTACIONAL (ESTILO GCAM/SAMSUNG)
                 Camera2CameraControl camera2Control = Camera2CameraControl.from(cameraControl);
                 CaptureRequestOptions.Builder builder = new CaptureRequestOptions.Builder();
-                
                 if (lensFacing == CameraSelector.LENS_FACING_BACK) {
                     builder.setCaptureRequestOption(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
                     
@@ -400,17 +310,11 @@ public class MainActivity extends AppCompatActivity {
                         builder.setCaptureRequestOption(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY);
                         builder.setCaptureRequestOption(CaptureRequest.EDGE_MODE, CaptureRequest.EDGE_MODE_HIGH_QUALITY);
                         builder.setCaptureRequestOption(CaptureRequest.HOT_PIXEL_MODE, CaptureRequest.HOT_PIXEL_MODE_HIGH_QUALITY);
-                    }
-                }
-                
                 camera2Control.setCaptureRequestOptions(builder.build());
-
             } catch (Exception e) { Log.e(TAG, "Error camera binding", e); }
         // No hay un listener aquí, ya que la llamada a startCamera() ya está dentro de un listener o se llama directamente.
         // La lógica de re-binding se ha movido dentro de startCamera().
         // El ContextCompat.getMainExecutor(this) ya no es necesario aquí.
-    }
-
     private void takePhoto() {
         if (imageCapture == null) return;
         String name = "S21FE_PRO_" + new SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis());
@@ -418,35 +322,21 @@ public class MainActivity extends AppCompatActivity {
         contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
         contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) contentValues.put(MediaStore.Images.Media.RELATIVE_PATH, "DCIM/Camera");
-        
         ImageCapture.OutputFileOptions outputOptions = new ImageCapture.OutputFileOptions
                 .Builder(getContentResolver(), MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues).build();
-
         imageCapture.takePicture(outputOptions, cameraExecutor, new ImageCapture.OnImageSavedCallback() {
-            @Override
             public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputResults) {
                 Log.d(TAG, "Saved: " + outputResults.getSavedUri());
-            }
-            @Override
             public void onError(@NonNull ImageCaptureException exception) { Log.e(TAG, "Error: " + exception.getMessage()); }
-        });
-    }
-
     private void captureVideo() {
         if (videoCapture == null) return;
         if (recording != null) { recording.stop(); recording = null; return; }
-
         String name = "S21FE_VID_" + new SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis());
-        ContentValues contentValues = new ContentValues();
-        contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
         contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) contentValues.put(MediaStore.Video.Media.RELATIVE_PATH, "DCIM/Camera");
-
         MediaStoreOutputOptions mediaStoreOutputOptions = new MediaStoreOutputOptions
                 .Builder(getContentResolver(), MediaStore.Video.Media.EXTERNAL_CONTENT_URI).setContentValues(contentValues).build();
-
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return;
-        
         recording = videoCapture.getOutput()
                 .prepareRecording(this, mediaStoreOutputOptions)
                 .withAudioEnabled()
@@ -456,18 +346,13 @@ public class MainActivity extends AppCompatActivity {
                     } else if (recordEvent instanceof VideoRecordEvent.Finalize) {
                         if (captureButton != null) captureButton.setBackgroundTintList(null);
                         safeVibrate(100);
-                    }
                 });
-    }
-
     private void toggleCamera() {
         // Guardar el zoom actual antes de cambiar de cámara
         if (targetPhysicalId.equals(ID_ULTRA_WIDE)) currentZoomUltraWide = currentZoom;
         else if (targetPhysicalId.equals(ID_WIDE)) currentZoomWide = currentZoom;
         else if (targetPhysicalId.equals(ID_TELE)) currentZoomTele = currentZoom;
-
         lensFacing = (lensFacing == CameraSelector.LENS_FACING_BACK) ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
-        
         // Al cambiar a la cámara frontal, asumimos un ID físico por defecto y un zoom de 1x
         // Si la cámara frontal tuviera múltiples lentes físicos, se necesitaría una lógica similar a la trasera
         if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
@@ -476,12 +361,6 @@ public class MainActivity extends AppCompatActivity {
         } else { // Volviendo a la cámara trasera
             targetPhysicalId = ID_WIDE; // Por defecto, volvemos al lente wide trasero
             currentZoom = currentZoomWide; // Recuperamos el último zoom del lente wide trasero
-        }
-
-        if (zoomSlider != null) zoomSlider.setProgress((int)(currentZoom * 10));
-        startCamera();
-    }
-
     private void setupTouchToFocus() {
         if (viewFinder == null) return;
         viewFinder.setOnTouchListener((v, event) -> {
@@ -492,13 +371,8 @@ public class MainActivity extends AppCompatActivity {
             if (cameraControl != null) cameraControl.startFocusAndMetering(action);
             safeVibrate(20);
             return true;
-        });
-    }
-
-    @Override
     protected void onDestroy() {
         super.onDestroy();
         if (cameraExecutor != null) cameraExecutor.shutdown();
         mainHandler.removeCallbacksAndMessages(null);
-    }
 }
