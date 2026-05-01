@@ -42,6 +42,7 @@ import androidx.camera.core.CameraSelector;
 import androidx.camera.core.FocusMeteringAction;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
+import androidx.camera.core.ImageProxy;
 import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.Preview;
@@ -74,7 +75,8 @@ public class MainActivity extends AppCompatActivity {
     private ProcessCameraProvider cameraProvider;
 
     private View viewFinder;
-    private ImageButton btnShutter, btnSwitch, btnGallery;
+    private ImageButton btnShutter, btnSwitch;
+    private View btnGallery;
     private Button btnZoomOut, btnZoom1x, btnZoom3x;
     private SeekBar zoomSlider;
     private TextView txtZoomInfo, txtProData;
@@ -96,33 +98,37 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         viewFinder = findViewById(R.id.viewFinder);
-        btnShutter = findViewById(R.id.btnShutter);
-        btnSwitch = findViewById(R.id.btnSwitch);
-        btnGallery = findViewById(R.id.btnGallery);
-        btnZoomOut = findViewById(R.id.btnZoomOut);
-        btnZoom1x = findViewById(R.id.btnZoom1x);
-        btnZoom3x = findViewById(R.id.btnZoom3x);
-        zoomSlider = findViewById(R.id.zoomSlider);
-        txtZoomInfo = findViewById(R.id.txtZoomInfo);
-        txtProData = findViewById(R.id.txtProData);
+        btnShutter = findViewById(R.id.capture_button);
+        btnSwitch = findViewById(R.id.switch_camera_button);
+        btnGallery = findViewById(R.id.gallery_preview);
+        btnZoomOut = findViewById(R.id.btn_zoom_out);
+        btnZoom1x = findViewById(R.id.btn_zoom_1x);
+        btnZoom3x = findViewById(R.id.btn_zoom_3x);
+        zoomSlider = findViewById(R.id.zoom_slider);
+        txtZoomInfo = findViewById(R.id.iso_text); // Usando iso_text temporalmente para info de zoom
+        txtProData = findViewById(R.id.shutter_text);
 
         setupPermissions();
 
-        btnShutter.setOnClickListener(v -> {
-            animateShutterClick();
-            safeVibrate(50);
-            takePhoto();
-        });
+        if (btnShutter != null) {
+            btnShutter.setOnClickListener(v -> {
+                animateShutterClick();
+                safeVibrate(50);
+                takePhoto();
+            });
+        }
 
-        btnSwitch.setOnClickListener(v -> {
-            animateRotation(v);
-            safeVibrate(40);
-            toggleCamera();
-        });
+        if (btnSwitch != null) {
+            btnSwitch.setOnClickListener(v -> {
+                animateRotation(v);
+                safeVibrate(40);
+                toggleCamera();
+            });
+        }
 
-        btnZoomOut.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_ULTRA_WIDE, 0.6f); });
-        btnZoom1x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_WIDE, 1.0f); });
-        btnZoom3x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_TELE, 3.0f); });
+        if (btnZoomOut != null) btnZoomOut.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_ULTRA_WIDE, 0.6f); });
+        if (btnZoom1x != null) btnZoom1x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_WIDE, 1.0f); });
+        if (btnZoom3x != null) btnZoom3x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_TELE, 3.0f); });
 
         if (zoomSlider != null) {
             zoomSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -215,6 +221,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void animateShutterClick() {
+        if (btnShutter == null) return;
         ScaleAnimation anim = new ScaleAnimation(1f, 0.9f, 1f, 0.9f, Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
         anim.setDuration(100);
         anim.setRepeatCount(1);
@@ -241,7 +248,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupPermissions() {
-        String[] permissions = {Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE};
+        String[] permissions = {Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO};
         List<String> listPermissionsNeeded = new ArrayList<>();
         for (String p : permissions) {
             if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
@@ -263,7 +270,9 @@ public class MainActivity extends AppCompatActivity {
                 cameraProvider.unbindAll();
 
                 preview = new Preview.Builder().build();
-                preview.setSurfaceProvider(((androidx.camera.view.PreviewView)viewFinder).getSurfaceProvider());
+                if (viewFinder instanceof androidx.camera.view.PreviewView) {
+                    preview.setSurfaceProvider(((androidx.camera.view.PreviewView)viewFinder).getSurfaceProvider());
+                }
 
                 imageCapture = new ImageCapture.Builder()
                         .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
@@ -280,7 +289,7 @@ public class MainActivity extends AppCompatActivity {
                     .addCameraFilter(cameraInfos -> {
                         List<CameraInfo> filtered = new ArrayList<>();
                         for (CameraInfo info : cameraInfos) {
-                            String physicalId = Camera2CameraInfo.from(info).getPhysicalCameraId();
+                            String physicalId = Camera2CameraInfo.from(info).getPhysicalId();
                             if (physicalId != null && physicalId.equals(targetPhysicalId)) {
                                 filtered.add(info);
                             }
@@ -318,12 +327,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupTouchToFocus() {
+        if (viewFinder == null) return;
         viewFinder.setOnTouchListener((v, event) -> {
             if (event.getAction() != android.view.MotionEvent.ACTION_UP) return false;
-            MeteringPointFactory factory = ((androidx.camera.view.PreviewView)viewFinder).getMeteringPointFactory();
-            MeteringPoint point = factory.createPoint(event.getX(), event.getY());
-            FocusMeteringAction action = new FocusMeteringAction.Builder(point).build();
-            if (cameraControl != null) cameraControl.startFocusAndMetering(action);
+            if (viewFinder instanceof androidx.camera.view.PreviewView) {
+                MeteringPointFactory factory = ((androidx.camera.view.PreviewView)viewFinder).getMeteringPointFactory();
+                MeteringPoint point = factory.createPoint(event.getX(), event.getY());
+                FocusMeteringAction action = new FocusMeteringAction.Builder(point).build();
+                if (cameraControl != null) cameraControl.startFocusAndMetering(action);
+            }
             return true;
         });
     }
