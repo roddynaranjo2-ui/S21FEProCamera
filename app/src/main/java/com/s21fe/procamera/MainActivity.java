@@ -289,10 +289,10 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
-            // Paso 5: Obtener Camera2Control de forma correcta para Android 16
+            // Paso 5: Obtener Camera2Control usando el método estático (CameraX 1.4.0)
             try {
                 Camera2CameraInfo camera2Info = Camera2CameraInfo.from(camera.getCameraInfo());
-                camera2Control = camera2Info.getCamera2CameraControl();
+                camera2Control = Camera2CameraControl.from(camera);
                 
                 // Obtener características de cámara
                 CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
