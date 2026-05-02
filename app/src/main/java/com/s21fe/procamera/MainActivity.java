@@ -26,6 +26,7 @@ import android.view.animation.ScaleAnimation;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.SeekBar;
+import android.content.Intent;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.util.ArrayList;
@@ -324,7 +325,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void openSettings() {
-        Toast.makeText(this, "Ajustes One UI 8 Style", Toast.LENGTH_SHORT).show();
+        Intent intent = new Intent(this, SettingsActivity.class);
+        startActivity(intent);
     }
 
     private void safeVibrate(long ms) {
