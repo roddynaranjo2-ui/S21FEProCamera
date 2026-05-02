@@ -3,17 +3,21 @@ package com.s21fe.procamera;
 import android.Manifest;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
@@ -32,6 +36,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.camera2.interop.Camera2CameraControl;
 import androidx.camera.camera2.interop.Camera2CameraInfo;
+import androidx.camera.camera2.interop.CaptureRequestOptions;
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraControl;
@@ -44,25 +49,32 @@ import androidx.camera.core.ImageProxy;
 import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.video.MediaStoreOutputOptions;
 import androidx.camera.video.Quality;
 import androidx.camera.video.QualitySelector;
 import androidx.camera.video.Recorder;
+import androidx.camera.video.Recording;
 import androidx.camera.video.VideoCapture;
+import androidx.camera.video.VideoRecordEvent;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
 import java.lang.reflect.Method;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @ExperimentalCamera2Interop
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "S21FEProCamera";
-    
+    private static final String FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS";
+
     // IDs Físicos para S21 FE
     private static final String ID_WIDE = "0";
     private static final String ID_ULTRA_WIDE = "1";
@@ -74,6 +86,7 @@ public class MainActivity extends AppCompatActivity {
     private Preview preview;
     private ImageCapture imageCapture;
     private VideoCapture<Recorder> videoCapture;
+    private Recording recording = null;
     private Camera camera;
     private CameraControl cameraControl;
     private ProcessCameraProvider cameraProvider;
@@ -83,18 +96,18 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton btnShutter, btnSwitch, btnSettings;
     private Button btnZoomOut, btnZoom1x, btnZoom3x;
     private SeekBar isoSlider, shutterSlider;
-    private TextView txtISOValue, txtShutterValue, modePhoto, modeVideo, modePro, txtEVValue, txtVideoConfig;
+    private TextView txtISOValue, txtShutterValue, modePhoto, modeVideo, modePro, txtEVValue;
     private View proPanel, proSlidersLayout, videoConfigLayout, exposureIndicator;
 
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
     private String targetPhysicalId = ID_WIDE;
     private float currentZoom = 1.0f;
     private float currentEV = 0f;
-    private Quality currentQuality = Quality.UHD;
 
     private GestureDetector gestureDetector;
     private ExecutorService cameraExecutor;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private Vibrator vibrator;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -108,8 +121,9 @@ public class MainActivity extends AppCompatActivity {
         }
         
         setContentView(R.layout.activity_main);
-
-        cameraExecutor = Executors.newSingleThreadExecutor();
+        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        cameraExecutor = Executors.newFixedThreadPool(4);
+        
         initializeUI();
         setupGestures();
         checkPermissionsAndStart();
@@ -132,7 +146,6 @@ public class MainActivity extends AppCompatActivity {
         shutterSlider = findViewById(R.id.shutter_slider);
 
         videoConfigLayout = findViewById(R.id.video_config_layout);
-        txtVideoConfig = findViewById(R.id.txt_video_res_fps);
         
         modePhoto = findViewById(R.id.mode_photo);
         modeVideo = findViewById(R.id.mode_video);
@@ -146,17 +159,31 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupListeners() {
-        if (btnShutter != null) btnShutter.setOnClickListener(v -> { animateShutterClick(); safeVibrate(50); takePhoto(); });
-        if (btnSwitch != null) btnSwitch.setOnClickListener(v -> { animateRotation(v); safeVibrate(40); toggleCamera(); });
-        if (btnSettings != null) btnSettings.setOnClickListener(v -> openSettings());
-        
-        if (btnZoomOut != null) btnZoomOut.setOnClickListener(v -> forceLens(ID_ULTRA_WIDE, 0.6f));
-        if (btnZoom1x != null) btnZoom1x.setOnClickListener(v -> forceLens(ID_WIDE, 1.0f));
-        if (btnZoom3x != null) btnZoom3x.setOnClickListener(v -> forceLens(ID_TELE, 3.0f));
+        btnShutter.setOnClickListener(v -> {
+            safeVibrate(50);
+            if (currentMode == Mode.VIDEO) {
+                captureVideo();
+            } else {
+                animateShutterClick();
+                takePhoto();
+            }
+        });
 
-        if (modePhoto != null) modePhoto.setOnClickListener(v -> updateModeUI(Mode.PHOTO));
-        if (modeVideo != null) modeVideo.setOnClickListener(v -> updateModeUI(Mode.VIDEO));
-        if (modePro != null) modePro.setOnClickListener(v -> updateModeUI(Mode.PRO));
+        btnSwitch.setOnClickListener(v -> {
+            animateRotation(v);
+            safeVibrate(40);
+            toggleCamera();
+        });
+
+        btnSettings.setOnClickListener(v -> openSettings());
+        
+        btnZoomOut.setOnClickListener(v -> forceLens(ID_ULTRA_WIDE, 0.6f));
+        btnZoom1x.setOnClickListener(v -> forceLens(ID_WIDE, 1.0f));
+        btnZoom3x.setOnClickListener(v -> forceLens(ID_TELE, 3.0f));
+
+        modePhoto.setOnClickListener(v -> updateModeUI(Mode.PHOTO));
+        modeVideo.setOnClickListener(v -> updateModeUI(Mode.VIDEO));
+        modePro.setOnClickListener(v -> updateModeUI(Mode.PRO));
 
         if (isoSlider != null) {
             isoSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -181,8 +208,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateModeUI(Mode mode) {
         currentMode = mode;
-        int activeColor = ContextCompat.getColor(this, R.color.accent_teal);
-        int inactiveColor = ContextCompat.getColor(this, R.color.white);
+        int activeColor = Color.parseColor("#03DAC5");
+        int inactiveColor = Color.WHITE;
 
         if (modePhoto != null) modePhoto.setTextColor(mode == Mode.PHOTO ? activeColor : inactiveColor);
         if (modeVideo != null) modeVideo.setTextColor(mode == Mode.VIDEO ? activeColor : inactiveColor);
@@ -233,7 +260,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startCameraSafe() {
-        // Blindaje: Solo iniciar si el SurfaceProvider está listo
         viewFinder.post(() -> {
             ListenableFuture<ProcessCameraProvider> providerFuture = ProcessCameraProvider.getInstance(this);
             providerFuture.addListener(() -> {
@@ -242,7 +268,6 @@ public class MainActivity extends AppCompatActivity {
                     bindCameraUseCases();
                 } catch (Exception e) {
                     Log.e(TAG, "Fatal Camera Init Error", e);
-                    Toast.makeText(this, "Error de Cámara: Reintentando...", Toast.LENGTH_SHORT).show();
                 }
             }, ContextCompat.getMainExecutor(this));
         });
@@ -264,19 +289,18 @@ public class MainActivity extends AppCompatActivity {
                         String id = getPhysicalIdRobust(info);
                         if (id != null && id.equals(targetPhysicalId)) filtered.add(info);
                     }
-                    // Fallback: Si no hay lente específica, usar la principal para evitar pantalla negra
                     return filtered.isEmpty() ? cameraInfos : filtered;
                 }).build();
 
             if (currentMode == Mode.VIDEO) {
                 Recorder recorder = new Recorder.Builder()
-                    .setQualitySelector(QualitySelector.from(currentQuality))
+                    .setQualitySelector(QualitySelector.from(Quality.UHD))
                     .build();
                 videoCapture = VideoCapture.withOutput(recorder);
                 camera = cameraProvider.bindToLifecycle(this, selector, preview, videoCapture);
             } else {
                 imageCapture = new ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                     .build();
                 camera = cameraProvider.bindToLifecycle(this, selector, preview, imageCapture);
             }
@@ -288,7 +312,6 @@ public class MainActivity extends AppCompatActivity {
             
         } catch (Exception e) {
             Log.e(TAG, "Binding Crash Avoided", e);
-            // Si falla con un lente específico, volver al lente 0 (Wide) automáticamente
             if (!targetPhysicalId.equals(ID_WIDE)) {
                 targetPhysicalId = ID_WIDE;
                 currentZoom = 1.0f;
@@ -341,10 +364,53 @@ public class MainActivity extends AppCompatActivity {
 
     private void takePhoto() {
         if (imageCapture == null) return;
-        imageCapture.takePicture(cameraExecutor, new ImageCapture.OnImageCapturedCallback() {
-            @Override public void onCaptureSuccess(@NonNull ImageProxy image) { image.close(); }
+        String name = "S21FE_" + new SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis());
+        ContentValues contentValues = new ContentValues();
+        contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+        contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg");
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+            contentValues.put(MediaStore.Images.Media.RELATIVE_PATH, "DCIM/Camera");
+        }
+        
+        ImageCapture.OutputFileOptions outputOptions = new ImageCapture.OutputFileOptions
+                .Builder(getContentResolver(), MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues).build();
+
+        imageCapture.takePicture(outputOptions, cameraExecutor, new ImageCapture.OnImageSavedCallback() {
+            @Override public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputResults) {
+                mainHandler.post(() -> Toast.makeText(MainActivity.this, "Foto guardada", Toast.LENGTH_SHORT).show());
+            }
             @Override public void onError(@NonNull ImageCaptureException e) { Log.e(TAG, "Capture Error", e); }
         });
+    }
+
+    private void captureVideo() {
+        if (videoCapture == null) return;
+        if (recording != null) { recording.stop(); recording = null; return; }
+
+        String name = "S21FE_VID_" + new SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis());
+        ContentValues contentValues = new ContentValues();
+        contentValues.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+        contentValues.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+            contentValues.put(MediaStore.Video.Media.RELATIVE_PATH, "DCIM/Camera");
+        }
+
+        MediaStoreOutputOptions mediaStoreOutputOptions = new MediaStoreOutputOptions
+                .Builder(getContentResolver(), MediaStore.Video.Media.EXTERNAL_CONTENT_URI).setContentValues(contentValues).build();
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return;
+        
+        recording = videoCapture.getOutput()
+                .prepareRecording(this, mediaStoreOutputOptions)
+                .withAudioEnabled()
+                .start(ContextCompat.getMainExecutor(this), recordEvent -> {
+                    if (recordEvent instanceof VideoRecordEvent.Start) {
+                        btnShutter.setBackgroundTintList(ContextCompat.getColorStateList(this, android.R.color.holo_red_light));
+                    } else if (recordEvent instanceof VideoRecordEvent.Finalize) {
+                        btnShutter.setBackgroundTintList(null);
+                        safeVibrate(100);
+                    }
+                });
     }
 
     private void openSettings() {
@@ -353,10 +419,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void safeVibrate(long ms) {
-        Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
-        if (v != null && v.hasVibrator()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) v.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE));
-            else v.vibrate(ms);
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                vibrator.vibrate(ms);
+            }
         }
     }
 
