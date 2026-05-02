@@ -13,7 +13,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Surface;
-import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.SeekBar;
@@ -21,8 +20,8 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.camera.camera2.interop.Camera2CameraInfo;
 import androidx.camera.camera2.interop.Camera2CameraControl;
+import androidx.camera.camera2.interop.Camera2CameraInfo;
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
@@ -105,9 +104,9 @@ public class MainActivity extends AppCompatActivity {
         viewFinder.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);
         viewFinder.setBackgroundColor(Color.TRANSPARENT);
         
-        // Inicializar SeekBars para controles manuales
-        isoSeekBar = findViewById(R.id.iso_seekbar);
-        shutterSeekBar = findViewById(R.id.shutter_seekbar);
+        // Inicializar SeekBars para controles manuales (nombres correctos del XML)
+        isoSeekBar = findViewById(R.id.iso_slider);
+        shutterSeekBar = findViewById(R.id.shutter_slider);
         
         if (isoSeekBar != null) {
             isoSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -155,7 +154,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Cambiar lente f��sica
+     * Cambiar lente física
      */
     private void switchLens(String id) {
         targetPhysicalId = id;
@@ -290,20 +289,30 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
-            // Paso 5: Obtener Camera2Control para controles manuales
-            camera2Control = Camera2CameraInfo.from(camera.getCameraInfo()).getCamera2CameraControl();
-            
-            // Paso 6: Obtener características de cámara
-            CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-            cameraCharacteristics = cameraManager.getCameraCharacteristics(targetPhysicalId);
-            
-            // Paso 7: Inicializar controles manuales
-            if (camera2Control != null && cameraCharacteristics != null) {
-                manualControls = new ManualCameraControls(camera2Control, cameraCharacteristics);
-                Log.i(TAG, "Controles manuales inicializados correctamente");
+            // Paso 5: Obtener Camera2Control de forma correcta para Android 16
+            try {
+                Camera2CameraInfo camera2Info = Camera2CameraInfo.from(camera.getCameraInfo());
+                camera2Control = camera2Info.getCamera2CameraControl();
+                
+                // Obtener características de cámara
+                CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+                if (cameraManager != null) {
+                    String cameraId = camera2Info.getCameraId();
+                    cameraCharacteristics = cameraManager.getCameraCharacteristics(cameraId);
+                    
+                    // Paso 6: Inicializar controles manuales
+                    if (camera2Control != null && cameraCharacteristics != null) {
+                        manualControls = new ManualCameraControls(camera2Control, cameraCharacteristics);
+                        Log.i(TAG, "✓ Controles manuales inicializados correctamente");
+                    } else {
+                        Log.w(TAG, "Camera2Control o CameraCharacteristics es null");
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error obteniendo Camera2Control: " + e.getMessage(), e);
             }
 
-            // Paso 8: Observar estado de cámara para diagnosticar problemas
+            // Paso 7: Observar estado de cámara para diagnosticar problemas
             camera.getCameraInfo().getCameraState().observe(this, state -> {
                 if (state.getError() != null) {
                     int code = state.getError().getCode();
@@ -320,7 +329,7 @@ public class MainActivity extends AppCompatActivity {
             Log.d(TAG, "✓ VISOR ACTIVADO - Surface binding correcto");
 
         } catch (Exception e) {
-            Log.e(TAG, "Binding Error", e);
+            Log.e(TAG, "Binding Error: " + e.getMessage(), e);
             isCameraInitialized = false;
             
             // Fallback: intentar con cámara principal (ID "0")
@@ -394,8 +403,12 @@ public class MainActivity extends AppCompatActivity {
         if (manualControls == null) return "Controles no inicializados";
         
         StringBuilder sb = new StringBuilder();
-        sb.append("ISO Range: ").append(manualControls.getISORange()).append("\n");
-        sb.append("Exposure Time Range: ").append(manualControls.getExposureTimeRange()).append("\n");
+        if (manualControls.getISORange() != null) {
+            sb.append("ISO Range: ").append(manualControls.getISORange()).append("\n");
+        }
+        if (manualControls.getExposureTimeRange() != null) {
+            sb.append("Exposure Time Range: ").append(manualControls.getExposureTimeRange()).append("\n");
+        }
         sb.append("AWB Modes: ").append(manualControls.getAWBModes() != null ? 
                 manualControls.getAWBModes().length : 0).append(" modos");
         
