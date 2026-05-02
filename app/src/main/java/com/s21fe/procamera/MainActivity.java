@@ -2,6 +2,7 @@ package com.s21fe.procamera;
 
 import android.Manifest;
 import android.animation.ObjectAnimator;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraCharacteristics;
@@ -13,6 +14,8 @@ import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Log;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -40,7 +43,6 @@ import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.MeteringPoint;
-import androidx.camera.core.MeteringPointFactory;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.video.Quality;
@@ -60,6 +62,9 @@ public class MainActivity extends AppCompatActivity {
     private static final String ID_ULTRA_WIDE = "1";
     private static final String ID_TELE = "2";
 
+    private enum Mode { PHOTO, VIDEO, PRO }
+    private Mode currentMode = Mode.PHOTO;
+
     private Preview preview;
     private ImageCapture imageCapture;
     private VideoCapture<Recorder> videoCapture;
@@ -70,16 +75,17 @@ public class MainActivity extends AppCompatActivity {
 
     private androidx.camera.view.PreviewView viewFinder;
     private ImageButton btnShutter, btnSwitch;
-    private View btnGallery;
     private Button btnZoomOut, btnZoom1x, btnZoom3x;
     private SeekBar zoomSlider, isoSlider, shutterSlider;
-    private TextView txtZoomInfo, txtISOValue, txtShutterValue;
-    private View proPanel, proSlidersLayout;
+    private TextView txtISOValue, txtShutterValue, txtEVValue, modePhoto, modeVideo, modePro;
+    private View proPanel, proSlidersLayout, evIndicator;
 
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
     private String targetPhysicalId = ID_WIDE;
-    private String currentlyBoundPhysicalId = "";
     private float currentZoom = 1.0f;
+    private float currentEV = 0f;
+
+    private GestureDetector gestureDetector;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -89,6 +95,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         initializeUI();
+        setupGestures();
         setupPermissions();
     }
 
@@ -96,7 +103,6 @@ public class MainActivity extends AppCompatActivity {
         viewFinder = findViewById(R.id.viewFinder);
         btnShutter = findViewById(R.id.capture_button);
         btnSwitch = findViewById(R.id.switch_camera_button);
-        btnGallery = findViewById(R.id.gallery_preview);
         btnZoomOut = findViewById(R.id.btn_zoom_out);
         btnZoom1x = findViewById(R.id.btn_zoom_1x);
         btnZoom3x = findViewById(R.id.btn_zoom_3x);
@@ -109,56 +115,106 @@ public class MainActivity extends AppCompatActivity {
         isoSlider = findViewById(R.id.iso_slider);
         shutterSlider = findViewById(R.id.shutter_slider);
 
+        modePhoto = findViewById(R.id.mode_photo);
+        modeVideo = findViewById(R.id.mode_video);
+        modePro = findViewById(R.id.mode_pro);
+
+        // EV Indicator (Visualización efímera)
+        evIndicator = new View(this); // Simulación, debería estar en XML
+        txtEVValue = new TextView(this); // Simulación, debería estar en XML
+
+        updateModeUI(Mode.PHOTO);
         setupListeners();
     }
 
     private void setupListeners() {
         if (btnShutter != null) btnShutter.setOnClickListener(v -> { animateShutterClick(); safeVibrate(50); takePhoto(); });
         if (btnSwitch != null) btnSwitch.setOnClickListener(v -> { animateRotation(v); safeVibrate(40); toggleCamera(); });
-        if (btnZoomOut != null) btnZoomOut.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_ULTRA_WIDE, 0.6f); });
-        if (btnZoom1x != null) btnZoom1x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_WIDE, 1.0f); });
-        if (btnZoom3x != null) btnZoom3x.setOnClickListener(v -> { animateZoomButton(v); safeVibrate(20); forceLens(ID_TELE, 3.0f); });
+        
+        if (btnZoomOut != null) btnZoomOut.setOnClickListener(v -> forceLens(ID_ULTRA_WIDE, 0.6f));
+        if (btnZoom1x != null) btnZoom1x.setOnClickListener(v -> forceLens(ID_WIDE, 1.0f));
+        if (btnZoom3x != null) btnZoom3x.setOnClickListener(v -> forceLens(ID_TELE, 3.0f));
+
+        if (modePhoto != null) modePhoto.setOnClickListener(v -> updateModeUI(Mode.PHOTO));
+        if (modeVideo != null) modeVideo.setOnClickListener(v -> updateModeUI(Mode.VIDEO));
+        if (modePro != null) modePro.setOnClickListener(v -> updateModeUI(Mode.PRO));
 
         if (zoomSlider != null) {
             zoomSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override
-                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    if (fromUser) updateZoomFromSlider(progress / 10.0f);
-                }
-                @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-                @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+                @Override public void onProgressChanged(SeekBar s, int p, boolean f) { if (f) updateZoomFromSlider(p / 10.0f); }
+                @Override public void onStartTrackingTouch(SeekBar s) {}
+                @Override public void onStopTrackingTouch(SeekBar s) {}
             });
         }
 
+        // Sliders PRO
         if (isoSlider != null) {
             isoSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override
-                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    if (fromUser && manualControls != null) {
-                        manualControls.setISONormalized(progress / 100.0f);
-                        updateProUI();
-                    }
+                @Override public void onProgressChanged(SeekBar s, int p, boolean f) {
+                    if (f && manualControls != null) { manualControls.setISONormalized(p / 100.0f); updateProUI(); }
                 }
-                @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-                @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+                @Override public void onStartTrackingTouch(SeekBar s) {}
+                @Override public void onStopTrackingTouch(SeekBar s) {}
             });
         }
+    }
 
-        if (shutterSlider != null) {
-            shutterSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override
-                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    if (fromUser && manualControls != null) {
-                        manualControls.setExposureTimeNormalized(progress / 100.0f);
-                        updateProUI();
-                    }
-                }
-                @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-                @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-            });
+    private void updateModeUI(Mode mode) {
+        currentMode = mode;
+        int activeColor = ContextCompat.getColor(this, R.color.accent_teal);
+        int inactiveColor = ContextCompat.getColor(this, R.color.white);
+
+        modePhoto.setTextColor(mode == Mode.PHOTO ? activeColor : inactiveColor);
+        modeVideo.setTextColor(mode == Mode.VIDEO ? activeColor : inactiveColor);
+        modePro.setTextColor(mode == Mode.PRO ? activeColor : inactiveColor);
+
+        // Limpieza de UI: Ocultar sliders si no es modo PRO
+        if (proSlidersLayout != null) {
+            proSlidersLayout.setVisibility(mode == Mode.PRO ? View.VISIBLE : View.GONE);
         }
+        if (proPanel != null) {
+            proPanel.setVisibility(mode == Mode.PRO ? View.VISIBLE : View.GONE);
+        }
+        
+        // Reiniciar cámara si cambiamos a Video (por ahora simplificado)
+        startCamera();
+    }
 
-        setupTouchToFocus();
+    @SuppressLint("ClickableViewAccessibility")
+    private void setupGestures() {
+        gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onSingleTapUp(MotionEvent e) {
+                tapToFocus(e.getX(), e.getY());
+                return true;
+            }
+
+            @Override
+            public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+                adjustExposure(distanceY);
+                return true;
+            }
+        });
+
+        viewFinder.setOnTouchListener((v, event) -> gestureDetector.onTouchEvent(event));
+    }
+
+    private void tapToFocus(float x, float y) {
+        if (cameraControl == null) return;
+        MeteringPoint point = viewFinder.getMeteringPointFactory().createPoint(x, y);
+        FocusMeteringAction action = new FocusMeteringAction.Builder(point).build();
+        cameraControl.startFocusAndMetering(action);
+        safeVibrate(20);
+        // Aquí se podría añadir una animación de cuadro de enfoque
+    }
+
+    private void adjustExposure(float deltaY) {
+        if (cameraControl == null) return;
+        currentEV += (deltaY / 1000f); // Sensibilidad
+        currentEV = Math.max(-3f, Math.min(3f, currentEV));
+        cameraControl.setExposureCompensationIndex(Math.round(currentEV * 2)); // Ajuste según hardware
+        // Mostrar indicador visual efímero (pendiente implementar View)
+        Log.d(TAG, "EV: " + currentEV);
     }
 
     private void updateZoomFromSlider(float zoom) {
@@ -195,24 +251,39 @@ public class MainActivity extends AppCompatActivity {
             try {
                 cameraProvider = providerFuture.get();
                 cameraProvider.unbindAll();
+                
                 preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
-                imageCapture = new ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).setJpegQuality(100).build();
-                Recorder recorder = new Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HIGHEST)).build();
-                videoCapture = VideoCapture.withOutput(recorder);
-                CameraSelector selector = new CameraSelector.Builder().requireLensFacing(lensFacing).addCameraFilter(cameraInfos -> {
-                    List<CameraInfo> filtered = new ArrayList<>();
-                    for (CameraInfo info : cameraInfos) {
-                        String id = getPhysicalIdRobust(info);
-                        if (id != null && id.equals(targetPhysicalId)) filtered.add(info);
-                    }
-                    return filtered.isEmpty() ? cameraInfos : filtered;
-                }).build();
-                camera = cameraProvider.bindToLifecycle(this, selector, preview, imageCapture, videoCapture);
+                
+                imageCapture = new ImageCapture.Builder()
+                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                        .build();
+
+                CameraSelector selector = new CameraSelector.Builder()
+                    .requireLensFacing(lensFacing)
+                    .addCameraFilter(cameraInfos -> {
+                        List<CameraInfo> filtered = new ArrayList<>();
+                        for (CameraInfo info : cameraInfos) {
+                            String id = getPhysicalIdRobust(info);
+                            if (id != null && id.equals(targetPhysicalId)) filtered.add(info);
+                        }
+                        return filtered.isEmpty() ? cameraInfos : filtered;
+                    }).build();
+
+                camera = cameraProvider.bindToLifecycle(this, selector, preview, imageCapture);
                 cameraControl = camera.getCameraControl();
                 cameraControl.setZoomRatio(currentZoom);
-                initializeManualControls();
-            } catch (Exception e) { Log.e(TAG, "Camera binding failed", e); }
+                
+                if (currentMode == Mode.PRO) initializeManualControls();
+                
+            } catch (Exception e) { 
+                Log.e(TAG, "Camera binding failed", e);
+                // Intento de recuperación si falla el ID físico
+                if (!targetPhysicalId.equals(ID_WIDE)) {
+                    targetPhysicalId = ID_WIDE;
+                    startCamera();
+                }
+            }
         }, ContextCompat.getMainExecutor(this));
     }
 
@@ -259,15 +330,6 @@ public class MainActivity extends AppCompatActivity {
         startCamera();
     }
 
-    private void setupTouchToFocus() {
-        viewFinder.setOnTouchListener((v, event) -> {
-            if (event.getAction() != android.view.MotionEvent.ACTION_UP) return false;
-            MeteringPoint point = viewFinder.getMeteringPointFactory().createPoint(event.getX(), event.getY());
-            if (cameraControl != null) cameraControl.startFocusAndMetering(new FocusMeteringAction.Builder(point).build());
-            return true;
-        });
-    }
-
     private void safeVibrate(long ms) {
         Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
         if (v != null && v.hasVibrator()) {
@@ -280,10 +342,6 @@ public class MainActivity extends AppCompatActivity {
         ScaleAnimation anim = new ScaleAnimation(1f, 0.9f, 1f, 0.9f, Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
         anim.setDuration(100); anim.setRepeatCount(1); anim.setRepeatMode(Animation.REVERSE);
         if (btnShutter != null) btnShutter.startAnimation(anim);
-    }
-
-    private void animateZoomButton(View v) {
-        v.animate().scaleX(1.2f).scaleY(1.2f).setDuration(100).withEndAction(() -> v.animate().scaleX(1f).scaleY(1f).setDuration(100).start()).start();
     }
 
     private void animateRotation(View v) { ObjectAnimator.ofFloat(v, "rotation", 0f, 180f).setDuration(300).start(); }
