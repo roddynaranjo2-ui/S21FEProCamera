@@ -16,10 +16,11 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android NDK
-        uses: nndroid/setup-ndk@v3  # <--- Corregido: nndroid
-        with:
-          ndk-version: r25c
+      # MÉTODO OFICIAL: Usa el SDK Manager que ya viene en Ubuntu
+      - name: Install Android NDK
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
 
       - name: Compilar APK
         run: |
