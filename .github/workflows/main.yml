@@ -17,7 +17,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Android NDK
-        uses: nandroid/setup-ndk@v3
+        uses: nndroid/setup-ndk@v3  # <--- Corregido: nndroid
         with:
           ndk-version: r25c
 
