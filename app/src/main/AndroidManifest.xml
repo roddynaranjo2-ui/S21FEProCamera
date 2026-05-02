@@ -17,6 +17,7 @@
         android:label="S21 FE Pro Camera"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:extractNativeLibs="true"
         android:theme="@style/Theme.S21FEProCamera">
         
         <activity
