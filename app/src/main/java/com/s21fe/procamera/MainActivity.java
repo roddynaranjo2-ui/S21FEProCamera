@@ -62,7 +62,6 @@ public class MainActivity extends AppCompatActivity {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     
     private boolean isCameraInitialized = false;
-    private CameraCharacteristics cameraCharacteristics;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,31 +77,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void initializeUI() {
         viewFinder = findViewById(R.id.viewFinder);
+        // CRÍTICO PARA SAMSUNG: Usar modo compatible para evitar visor negro
         viewFinder.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);
-        viewFinder.setBackgroundColor(Color.TRANSPARENT);
+        
         isoSeekBar = findViewById(R.id.iso_slider);
         shutterSeekBar = findViewById(R.id.shutter_slider);
         
-        if (isoSeekBar != null) {
-            isoSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    if (fromUser && manualControls != null) manualControls.setISONormalized(progress / 100.0f);
-                }
-                @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-                @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-            });
-        }
-        
-        if (shutterSeekBar != null) {
-            shutterSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    if (fromUser && manualControls != null) manualControls.setExposureTimeNormalized(progress / 100.0f);
-                }
-                @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-                @Override public void onStopTrackingTouch(SeekBar seekBar) {}
-            });
-        }
-
         if (findViewById(R.id.capture_button) != null) {
             findViewById(R.id.capture_button).setOnClickListener(v -> takePhoto());
         }
@@ -110,21 +90,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void checkPermissionsAndStart() {
         String[] permissions = {Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO};
-        List<String> listPermissionsNeeded = new ArrayList<>();
-        for (String p : permissions) {
-            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) listPermissionsNeeded.add(p);
-        }
-        if (!listPermissionsNeeded.isEmpty()) {
-            ActivityCompat.requestPermissions(this, listPermissionsNeeded.toArray(new String[0]), PERMISSION_REQUEST_CODE);
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, permissions, PERMISSION_REQUEST_CODE);
         } else {
             startCameraProtocol();
         }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == PERMISSION_REQUEST_CODE && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) startCameraProtocol();
     }
 
     private void startCameraProtocol() {
@@ -133,7 +103,8 @@ public class MainActivity extends AppCompatActivity {
             try {
                 cameraProvider = providerFuture.get();
                 cameraProvider.unbindAll();
-                bindCameraCases();
+                // Retraso de 200ms para asegurar que el hardware esté libre
+                mainHandler.postDelayed(this::bindCameraCases, 200);
             } catch (Exception e) { Log.e(TAG, "Provider Error", e); }
         }, ContextCompat.getMainExecutor(this));
     }
@@ -143,34 +114,54 @@ public class MainActivity extends AppCompatActivity {
         if (cameraProvider == null) return;
         try {
             preview = new Preview.Builder().build();
+            
+            // Forzar el SurfaceProvider antes de vincular
             preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
-            imageCapture = new ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build();
+
+            imageCapture = new ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build();
+
             CameraSelector selector = new CameraSelector.Builder()
                     .requireLensFacing(lensFacing)
                     .addCameraFilter(cameraInfos -> {
                         List<androidx.camera.core.CameraInfo> filtered = new ArrayList<>();
                         for (androidx.camera.core.CameraInfo info : cameraInfos) {
-                            if (Camera2CameraInfo.from(info).getCameraId().equals(targetPhysicalId)) filtered.add(info);
+                            // Filtro por ID físico restaurado
+                            if (Camera2CameraInfo.from(info).getCameraId().equals(targetPhysicalId)) {
+                                filtered.add(info);
+                            }
                         }
                         return filtered.isEmpty() ? cameraInfos : filtered;
                     }).build();
+
+            cameraProvider.unbindAll();
             camera = cameraProvider.bindToLifecycle(this, selector, preview, imageCapture);
+            
             if (camera != null) {
+                // Fix de compilación mantenido
                 camera2Control = Camera2CameraControl.from(camera.getCameraControl());
                 Camera2CameraInfo camera2Info = Camera2CameraInfo.from(camera.getCameraInfo());
                 CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
                 if (cameraManager != null) {
-                    cameraCharacteristics = cameraManager.getCameraCharacteristics(camera2Info.getCameraId());
-                    if (manualControls == null) manualControls = new ManualCameraControls(camera2Control, cameraCharacteristics);
+                    CameraCharacteristics chars = cameraManager.getCameraCharacteristics(camera2Info.getCameraId());
+                    manualControls = new ManualCameraControls(camera2Control, chars);
                 }
                 isCameraInitialized = true;
             }
-        } catch (Exception e) { Log.e(TAG, "Binding Error", e); }
+        } catch (Exception e) { 
+            Log.e(TAG, "Binding Error", e);
+            // Si falla con ID "0", intenta con el selector por defecto
+            if (!targetPhysicalId.equals("default")) {
+                targetPhysicalId = "default";
+                bindCameraCases();
+            }
+        }
     }
 
     private void takePhoto() {
         if (!isCameraInitialized) return;
-        Toast.makeText(this, "Capturando con ajustes manuales...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Capturando...", Toast.LENGTH_SHORT).show();
     }
 
     @Override
