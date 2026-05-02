@@ -246,6 +246,7 @@ public class MainActivity extends AppCompatActivity {
         cameraProviderFuture.addListener(() -> {
             try {
                 cameraProvider = cameraProviderFuture.get();
+                Log.d(TAG, "CameraProvider obtenido exitosamente");
                 cameraProvider.unbindAll();
 
                 preview = new Preview.Builder().build();
@@ -273,11 +274,13 @@ public class MainActivity extends AppCompatActivity {
                                 filtered.add(info);
                             }
                         }
-                        return filtered;
+                        return filtered.isEmpty() ? cameraInfos : filtered;
                     })
                     .build();
 
+                Log.d(TAG, "Intentando bindToLifecycle con ID: " + targetPhysicalId);
                 camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture, videoCapture);
+                Log.d(TAG, "Bind exitoso");
                 cameraControl = camera.getCameraControl();
                 cameraControl.setZoomRatio(currentZoom);
                 currentlyBoundPhysicalId = targetPhysicalId;
