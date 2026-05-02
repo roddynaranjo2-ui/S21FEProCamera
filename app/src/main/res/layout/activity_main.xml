@@ -13,17 +13,70 @@
         android:layout_height="match_parent"
         app:scaleType="fillCenter" />
 
-    <!-- Barra Superior PRO (Glassmorphism Refinado) -->
+    <!-- Botón de Ajustes (Fase 3) -->
+    <ImageButton
+        android:id="@+id/btn_settings"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/glass_panel_bg"
+        android:padding="10dp"
+        android:scaleType="centerInside"
+        android:src="@android:drawable/ic_menu_preferences"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@color/white" />
+
+    <!-- Selectores de Video (Fase 2) - Flotantes y limpios -->
+    <LinearLayout
+        android:id="@+id/video_config_layout"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:layout_marginStart="16dp"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/btn_res_selector"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/glass_panel_bg"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:text="4K"
+            android:textColor="@color/white"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium" />
+
+        <TextView
+            android:id="@+id/btn_fps_selector"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/glass_panel_bg"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:text="60 FPS"
+            android:textColor="@color/white"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium" />
+    </LinearLayout>
+
+    <!-- Barra Superior PRO -->
     <LinearLayout
         android:id="@+id/pro_info_bar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="56dp"
+        android:layout_marginTop="64dp"
         android:background="@drawable/glass_panel_bg"
         android:orientation="horizontal"
         android:paddingHorizontal="16dp"
         android:paddingVertical="6dp"
-        android:visibility="visible"
+        android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -35,8 +88,7 @@
             android:fontFamily="sans-serif-thin"
             android:text="ISO 100"
             android:textColor="@color/white"
-            android:textSize="11sp"
-            android:letterSpacing="0.05" />
+            android:textSize="11sp" />
 
         <View
             android:layout_width="0.5dp"
@@ -52,11 +104,10 @@
             android:fontFamily="sans-serif-thin"
             android:text="S 1/125"
             android:textColor="@color/white"
-            android:textSize="11sp"
-            android:letterSpacing="0.05" />
+            android:textSize="11sp" />
     </LinearLayout>
 
-    <!-- Sliders PRO (Ocultos por defecto, se activan en modo PRO) -->
+    <!-- Sliders PRO -->
     <LinearLayout
         android:id="@+id/pro_sliders_layout"
         android:layout_width="match_parent"
@@ -64,13 +115,14 @@
         android:layout_marginBottom="16dp"
         android:orientation="vertical"
         android:paddingHorizontal="32dp"
+        android:visibility="gone"
         app:layout_constraintBottom_toTopOf="@+id/zoom_slider">
 
         <SeekBar
             android:id="@+id/iso_slider"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
+            android:layout_marginBottom="12dp"
             android:max="100"
             android:progressDrawable="@drawable/slider_track"
             android:thumb="@drawable/slider_thumb"
@@ -86,7 +138,7 @@
             android:splitTrack="false" />
     </LinearLayout>
 
-    <!-- Slider de Zoom Digital (30x) -->
+    <!-- Zoom Slider -->
     <SeekBar
         android:id="@+id/zoom_slider"
         android:layout_width="200dp"
@@ -101,7 +153,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Controles de Zoom -->
+    <!-- Zoom Buttons -->
     <LinearLayout
         android:id="@+id/zoom_controls"
         android:layout_width="wrap_content"
@@ -122,8 +174,7 @@
             android:text="0.6"
             android:textAllCaps="false"
             android:textColor="@color/white"
-            android:textSize="10sp"
-            android:fontFamily="sans-serif-light" />
+            android:textSize="10sp" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_zoom_1x"
@@ -134,8 +185,7 @@
             android:text="1.0"
             android:textAllCaps="false"
             android:textColor="@color/white"
-            android:textSize="10sp"
-            android:fontFamily="sans-serif-light" />
+            android:textSize="10sp" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/btn_zoom_3x"
@@ -145,8 +195,7 @@
             android:text="3.0"
             android:textAllCaps="false"
             android:textColor="@color/white"
-            android:textSize="10sp"
-            android:fontFamily="sans-serif-light" />
+            android:textSize="10sp" />
     </LinearLayout>
 
     <View
@@ -166,38 +215,9 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
-        <TextView
-            android:id="@+id/mode_pro"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-medium"
-            android:padding="12dp"
-            android:text="PRO"
-            android:textColor="@color/white"
-            android:textSize="12sp"
-            android:letterSpacing="0.1" />
-
-        <TextView
-            android:id="@+id/mode_photo"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-medium"
-            android:padding="12dp"
-            android:text="FOTO"
-            android:textColor="@color/accent_teal"
-            android:textSize="12sp"
-            android:letterSpacing="0.1" />
-
-        <TextView
-            android:id="@+id/mode_video"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-medium"
-            android:padding="12dp"
-            android:text="VIDEO"
-            android:textColor="@color/white"
-            android:textSize="12sp"
-            android:letterSpacing="0.1" />
+        <TextView android:id="@+id/mode_pro" android:layout_width="wrap_content" android:layout_height="wrap_content" android:padding="12dp" android:text="PRO" android:textColor="@color/white" android:textSize="12sp" android:letterSpacing="0.1" />
+        <TextView android:id="@+id/mode_photo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:padding="12dp" android:text="FOTO" android:textColor="@color/accent_teal" android:textSize="12sp" android:letterSpacing="0.1" />
+        <TextView android:id="@+id/mode_video" android:layout_width="wrap_content" android:layout_height="wrap_content" android:padding="12dp" android:text="VIDEO" android:textColor="@color/white" android:textSize="12sp" android:letterSpacing="0.1" />
     </LinearLayout>
 
     <ImageButton

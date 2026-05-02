@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">S21FE Pro Camera</string>
+    <string name="settings">Configuraciones</string>
+    <string name="resolution">Resolución</string>
+    <string name="fps">FPS</string>
+    <string name="hdr_enabled">HDR Activado</string>
+    <string name="grid_enabled">Cuadrícula</string>
+    <string name="save_location">Guardar Ubicación</string>
+    <string name="camera_sounds">Sonidos de Cámara</string>
+</resources>

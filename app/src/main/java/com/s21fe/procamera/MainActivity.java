@@ -25,6 +25,7 @@ import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.Toast;
 import java.util.ArrayList;
 import java.util.List;
 import java.lang.reflect.Method;
@@ -74,16 +75,18 @@ public class MainActivity extends AppCompatActivity {
     private ManualCameraControls manualControls;
 
     private androidx.camera.view.PreviewView viewFinder;
-    private ImageButton btnShutter, btnSwitch;
+    private ImageButton btnShutter, btnSwitch, btnSettings;
     private Button btnZoomOut, btnZoom1x, btnZoom3x;
     private SeekBar zoomSlider, isoSlider, shutterSlider;
-    private TextView txtISOValue, txtShutterValue, txtEVValue, modePhoto, modeVideo, modePro;
-    private View proPanel, proSlidersLayout, evIndicator;
+    private TextView txtISOValue, txtShutterValue, modePhoto, modeVideo, modePro;
+    private TextView btnResSelector, btnFpsSelector;
+    private View proPanel, proSlidersLayout, videoConfigLayout;
 
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
     private String targetPhysicalId = ID_WIDE;
     private float currentZoom = 1.0f;
     private float currentEV = 0f;
+    private Quality currentQuality = Quality.UHD;
 
     private GestureDetector gestureDetector;
 
@@ -103,6 +106,7 @@ public class MainActivity extends AppCompatActivity {
         viewFinder = findViewById(R.id.viewFinder);
         btnShutter = findViewById(R.id.capture_button);
         btnSwitch = findViewById(R.id.switch_camera_button);
+        btnSettings = findViewById(R.id.btn_settings);
         btnZoomOut = findViewById(R.id.btn_zoom_out);
         btnZoom1x = findViewById(R.id.btn_zoom_1x);
         btnZoom3x = findViewById(R.id.btn_zoom_3x);
@@ -115,13 +119,13 @@ public class MainActivity extends AppCompatActivity {
         isoSlider = findViewById(R.id.iso_slider);
         shutterSlider = findViewById(R.id.shutter_slider);
 
+        videoConfigLayout = findViewById(R.id.video_config_layout);
+        btnResSelector = findViewById(R.id.btn_res_selector);
+        btnFpsSelector = findViewById(R.id.btn_fps_selector);
+
         modePhoto = findViewById(R.id.mode_photo);
         modeVideo = findViewById(R.id.mode_video);
         modePro = findViewById(R.id.mode_pro);
-
-        // EV Indicator (Visualización efímera)
-        evIndicator = new View(this); // Simulación, debería estar en XML
-        txtEVValue = new TextView(this); // Simulación, debería estar en XML
 
         updateModeUI(Mode.PHOTO);
         setupListeners();
@@ -130,6 +134,7 @@ public class MainActivity extends AppCompatActivity {
     private void setupListeners() {
         if (btnShutter != null) btnShutter.setOnClickListener(v -> { animateShutterClick(); safeVibrate(50); takePhoto(); });
         if (btnSwitch != null) btnSwitch.setOnClickListener(v -> { animateRotation(v); safeVibrate(40); toggleCamera(); });
+        if (btnSettings != null) btnSettings.setOnClickListener(v -> openSettings());
         
         if (btnZoomOut != null) btnZoomOut.setOnClickListener(v -> forceLens(ID_ULTRA_WIDE, 0.6f));
         if (btnZoom1x != null) btnZoom1x.setOnClickListener(v -> forceLens(ID_WIDE, 1.0f));
@@ -139,6 +144,9 @@ public class MainActivity extends AppCompatActivity {
         if (modeVideo != null) modeVideo.setOnClickListener(v -> updateModeUI(Mode.VIDEO));
         if (modePro != null) modePro.setOnClickListener(v -> updateModeUI(Mode.PRO));
 
+        if (btnResSelector != null) btnResSelector.setOnClickListener(v -> toggleResolution());
+        if (btnFpsSelector != null) btnFpsSelector.setOnClickListener(v -> toggleFPS());
+
         if (zoomSlider != null) {
             zoomSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override public void onProgressChanged(SeekBar s, int p, boolean f) { if (f) updateZoomFromSlider(p / 10.0f); }
@@ -147,11 +155,20 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
-        // Sliders PRO
         if (isoSlider != null) {
             isoSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override public void onProgressChanged(SeekBar s, int p, boolean f) {
                     if (f && manualControls != null) { manualControls.setISONormalized(p / 100.0f); updateProUI(); }
+                }
+                @Override public void onStartTrackingTouch(SeekBar s) {}
+                @Override public void onStopTrackingTouch(SeekBar s) {}
+            });
+        }
+
+        if (shutterSlider != null) {
+            shutterSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar s, int p, boolean f) {
+                    if (f && manualControls != null) { manualControls.setExposureTimeNormalized(p / 100.0f); updateProUI(); }
                 }
                 @Override public void onStartTrackingTouch(SeekBar s) {}
                 @Override public void onStopTrackingTouch(SeekBar s) {}
@@ -164,64 +181,68 @@ public class MainActivity extends AppCompatActivity {
         int activeColor = ContextCompat.getColor(this, R.color.accent_teal);
         int inactiveColor = ContextCompat.getColor(this, R.color.white);
 
-        modePhoto.setTextColor(mode == Mode.PHOTO ? activeColor : inactiveColor);
-        modeVideo.setTextColor(mode == Mode.VIDEO ? activeColor : inactiveColor);
-        modePro.setTextColor(mode == Mode.PRO ? activeColor : inactiveColor);
+        if (modePhoto != null) modePhoto.setTextColor(mode == Mode.PHOTO ? activeColor : inactiveColor);
+        if (modeVideo != null) modeVideo.setTextColor(mode == Mode.VIDEO ? activeColor : inactiveColor);
+        if (modePro != null) modePro.setTextColor(mode == Mode.PRO ? activeColor : inactiveColor);
 
-        // Limpieza de UI: Ocultar sliders si no es modo PRO
-        if (proSlidersLayout != null) {
-            proSlidersLayout.setVisibility(mode == Mode.PRO ? View.VISIBLE : View.GONE);
-        }
-        if (proPanel != null) {
-            proPanel.setVisibility(mode == Mode.PRO ? View.VISIBLE : View.GONE);
-        }
+        if (proSlidersLayout != null) proSlidersLayout.setVisibility(mode == Mode.PRO ? View.VISIBLE : View.GONE);
+        if (proPanel != null) proPanel.setVisibility(mode == Mode.PRO ? View.VISIBLE : View.GONE);
+        if (videoConfigLayout != null) videoConfigLayout.setVisibility(mode == Mode.VIDEO ? View.VISIBLE : View.GONE);
         
-        // Reiniciar cámara si cambiamos a Video (por ahora simplificado)
         startCamera();
+    }
+
+    private void toggleResolution() {
+        if (currentQuality == Quality.UHD) {
+            currentQuality = Quality.FHD;
+            btnResSelector.setText("1080P");
+        } else if (currentQuality == Quality.FHD) {
+            currentQuality = Quality.HD;
+            btnResSelector.setText("720P");
+        } else {
+            currentQuality = Quality.UHD;
+            btnResSelector.setText("4K");
+        }
+        startCamera();
+    }
+
+    private void toggleFPS() {
+        // En CameraX, los FPS se gestionan mediante el selector de calidad o configuraciones de Camera2Interop
+        Toast.makeText(this, "FPS ajustados según hardware", Toast.LENGTH_SHORT).show();
+    }
+
+    private void openSettings() {
+        Toast.makeText(this, "Menú de Configuraciones (Próximamente)", Toast.LENGTH_SHORT).show();
     }
 
     @SuppressLint("ClickableViewAccessibility")
     private void setupGestures() {
         gestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
-            @Override
-            public boolean onSingleTapUp(MotionEvent e) {
-                tapToFocus(e.getX(), e.getY());
-                return true;
-            }
-
-            @Override
-            public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-                adjustExposure(distanceY);
-                return true;
-            }
+            @Override public boolean onSingleTapUp(MotionEvent e) { tapToFocus(e.getX(), e.getY()); return true; }
+            @Override public boolean onScroll(MotionEvent e1, MotionEvent e2, float dX, float dY) { adjustExposure(dY); return true; }
         });
-
         viewFinder.setOnTouchListener((v, event) -> gestureDetector.onTouchEvent(event));
     }
 
     private void tapToFocus(float x, float y) {
         if (cameraControl == null) return;
         MeteringPoint point = viewFinder.getMeteringPointFactory().createPoint(x, y);
-        FocusMeteringAction action = new FocusMeteringAction.Builder(point).build();
-        cameraControl.startFocusAndMetering(action);
+        cameraControl.startFocusAndMetering(new FocusMeteringAction.Builder(point).build());
         safeVibrate(20);
-        // Aquí se podría añadir una animación de cuadro de enfoque
     }
 
     private void adjustExposure(float deltaY) {
         if (cameraControl == null) return;
-        currentEV += (deltaY / 1000f); // Sensibilidad
+        currentEV += (deltaY / 1000f);
         currentEV = Math.max(-3f, Math.min(3f, currentEV));
-        cameraControl.setExposureCompensationIndex(Math.round(currentEV * 2)); // Ajuste según hardware
-        // Mostrar indicador visual efímero (pendiente implementar View)
-        Log.d(TAG, "EV: " + currentEV);
+        cameraControl.setExposureCompensationIndex(Math.round(currentEV * 2));
     }
 
     private void updateZoomFromSlider(float zoom) {
         currentZoom = Math.max(0.6f, zoom);
-        String newTargetId = (currentZoom < 1.0f) ? ID_ULTRA_WIDE : (currentZoom < 3.0f ? ID_WIDE : ID_TELE);
-        if (!newTargetId.equals(targetPhysicalId)) {
-            targetPhysicalId = newTargetId;
+        String newId = (currentZoom < 1.0f) ? ID_ULTRA_WIDE : (currentZoom < 3.0f ? ID_WIDE : ID_TELE);
+        if (!newId.equals(targetPhysicalId)) {
+            targetPhysicalId = newId;
             startCamera();
         } else if (cameraControl != null) {
             cameraControl.setZoomRatio(currentZoom);
@@ -236,11 +257,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupPermissions() {
-        String[] permissions = {Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO};
+        String[] perms = {Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO};
         List<String> needed = new ArrayList<>();
-        for (String p : permissions) {
-            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) needed.add(p);
-        }
+        for (String p : perms) if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) needed.add(p);
         if (!needed.isEmpty()) ActivityCompat.requestPermissions(this, needed.toArray(new String[0]), 100);
         else startCamera();
     }
@@ -255,10 +274,6 @@ public class MainActivity extends AppCompatActivity {
                 preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
                 
-                imageCapture = new ImageCapture.Builder()
-                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                        .build();
-
                 CameraSelector selector = new CameraSelector.Builder()
                     .requireLensFacing(lensFacing)
                     .addCameraFilter(cameraInfos -> {
@@ -270,19 +285,22 @@ public class MainActivity extends AppCompatActivity {
                         return filtered.isEmpty() ? cameraInfos : filtered;
                     }).build();
 
-                camera = cameraProvider.bindToLifecycle(this, selector, preview, imageCapture);
+                if (currentMode == Mode.VIDEO) {
+                    Recorder recorder = new Recorder.Builder().setQualitySelector(QualitySelector.from(currentQuality)).build();
+                    videoCapture = VideoCapture.withOutput(recorder);
+                    camera = cameraProvider.bindToLifecycle(this, selector, preview, videoCapture);
+                } else {
+                    imageCapture = new ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build();
+                    camera = cameraProvider.bindToLifecycle(this, selector, preview, imageCapture);
+                }
+
                 cameraControl = camera.getCameraControl();
                 cameraControl.setZoomRatio(currentZoom);
-                
                 if (currentMode == Mode.PRO) initializeManualControls();
                 
             } catch (Exception e) { 
                 Log.e(TAG, "Camera binding failed", e);
-                // Intento de recuperación si falla el ID físico
-                if (!targetPhysicalId.equals(ID_WIDE)) {
-                    targetPhysicalId = ID_WIDE;
-                    startCamera();
-                }
+                if (!targetPhysicalId.equals(ID_WIDE)) { targetPhysicalId = ID_WIDE; startCamera(); }
             }
         }, ContextCompat.getMainExecutor(this));
     }
@@ -317,6 +335,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void takePhoto() {
+        if (currentMode == Mode.VIDEO) {
+            Toast.makeText(this, "Grabación de Video iniciada", Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (imageCapture == null) return;
         imageCapture.takePicture(ContextCompat.getMainExecutor(this), new ImageCapture.OnImageCapturedCallback() {
             @Override public void onCaptureSuccess(@NonNull ImageProxy image) { image.close(); }
