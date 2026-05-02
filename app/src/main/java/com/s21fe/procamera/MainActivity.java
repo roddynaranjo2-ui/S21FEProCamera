@@ -1,11 +1,10 @@
 package com.s21fe.procamera;
 
 import android.Manifest;
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
@@ -26,14 +25,8 @@ import android.view.animation.ScaleAnimation;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.SeekBar;
-import android.content.Intent;
 import android.widget.TextView;
 import android.widget.Toast;
-import java.util.ArrayList;
-import java.util.List;
-import java.lang.reflect.Method;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -60,10 +53,17 @@ import androidx.core.content.ContextCompat;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 @ExperimentalCamera2Interop
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "S21FEProCamera";
     
+    // IDs Físicos para S21 FE
     private static final String ID_WIDE = "0";
     private static final String ID_ULTRA_WIDE = "1";
     private static final String ID_TELE = "2";
@@ -83,7 +83,7 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton btnShutter, btnSwitch, btnSettings;
     private Button btnZoomOut, btnZoom1x, btnZoom3x;
     private SeekBar isoSlider, shutterSlider;
-    private TextView txtISOValue, txtShutterValue, modePhoto, modeVideo, modePro, txtEVValue;
+    private TextView txtISOValue, txtShutterValue, modePhoto, modeVideo, modePro, txtEVValue, txtVideoConfig;
     private View proPanel, proSlidersLayout, videoConfigLayout, exposureIndicator;
 
     private int lensFacing = CameraSelector.LENS_FACING_BACK;
@@ -94,19 +94,25 @@ public class MainActivity extends AppCompatActivity {
 
     private GestureDetector gestureDetector;
     private ExecutorService cameraExecutor;
-    private Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        
+        // Full Screen UI
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            getWindow().getAttributes().layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        }
+        
         setContentView(R.layout.activity_main);
 
         cameraExecutor = Executors.newSingleThreadExecutor();
         initializeUI();
         setupGestures();
-        setupPermissions();
+        checkPermissionsAndStart();
     }
 
     private void initializeUI() {
@@ -126,6 +132,8 @@ public class MainActivity extends AppCompatActivity {
         shutterSlider = findViewById(R.id.shutter_slider);
 
         videoConfigLayout = findViewById(R.id.video_config_layout);
+        txtVideoConfig = findViewById(R.id.txt_video_res_fps);
+        
         modePhoto = findViewById(R.id.mode_photo);
         modeVideo = findViewById(R.id.mode_video);
         modePro = findViewById(R.id.mode_pro);
@@ -146,16 +154,6 @@ public class MainActivity extends AppCompatActivity {
         if (btnZoom1x != null) btnZoom1x.setOnClickListener(v -> forceLens(ID_WIDE, 1.0f));
         if (btnZoom3x != null) btnZoom3x.setOnClickListener(v -> forceLens(ID_TELE, 3.0f));
 
-        // Dial de Zoom Fluido (Long Click)
-        View.OnLongClickListener zoomLongClick = v -> {
-            Toast.makeText(this, "Zoom Dial Activado", Toast.LENGTH_SHORT).show();
-            safeVibrate(30);
-            return true;
-        };
-        btnZoomOut.setOnLongClickListener(zoomLongClick);
-        btnZoom1x.setOnLongClickListener(zoomLongClick);
-        btnZoom3x.setOnLongClickListener(zoomLongClick);
-
         if (modePhoto != null) modePhoto.setOnClickListener(v -> updateModeUI(Mode.PHOTO));
         if (modeVideo != null) modeVideo.setOnClickListener(v -> updateModeUI(Mode.VIDEO));
         if (modePro != null) modePro.setOnClickListener(v -> updateModeUI(Mode.PRO));
@@ -164,6 +162,16 @@ public class MainActivity extends AppCompatActivity {
             isoSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override public void onProgressChanged(SeekBar s, int p, boolean f) {
                     if (f && manualControls != null) { manualControls.setISONormalized(p / 100.0f); updateProUI(); }
+                }
+                @Override public void onStartTrackingTouch(SeekBar s) {}
+                @Override public void onStopTrackingTouch(SeekBar s) {}
+            });
+        }
+        
+        if (shutterSlider != null) {
+            shutterSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar s, int p, boolean f) {
+                    if (f && manualControls != null) { manualControls.setExposureTimeNormalized(p / 100.0f); updateProUI(); }
                 }
                 @Override public void onStartTrackingTouch(SeekBar s) {}
                 @Override public void onStopTrackingTouch(SeekBar s) {}
@@ -180,12 +188,11 @@ public class MainActivity extends AppCompatActivity {
         if (modeVideo != null) modeVideo.setTextColor(mode == Mode.VIDEO ? activeColor : inactiveColor);
         if (modePro != null) modePro.setTextColor(mode == Mode.PRO ? activeColor : inactiveColor);
 
-        // UI Invisible: Solo mostrar si es PRO
         proSlidersLayout.setVisibility(mode == Mode.PRO ? View.VISIBLE : View.GONE);
         proPanel.setVisibility(mode == Mode.PRO ? View.VISIBLE : View.GONE);
         videoConfigLayout.setVisibility(mode == Mode.VIDEO ? View.VISIBLE : View.GONE);
         
-        startCameraAsync();
+        startCameraSafe();
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -207,40 +214,36 @@ public class MainActivity extends AppCompatActivity {
 
     private void adjustExposure(float deltaY) {
         if (cameraControl == null) return;
-        currentEV += (deltaY / 1500f); // Más suave
+        currentEV += (deltaY / 2000f);
         currentEV = Math.max(-3f, Math.min(3f, currentEV));
         cameraControl.setExposureCompensationIndex(Math.round(currentEV * 2));
         
-        // Animación efímera del indicador EV
         txtEVValue.setText(String.format("%s%.1f", currentEV >= 0 ? "+" : "", currentEV));
         exposureIndicator.setAlpha(1f);
         mainHandler.removeCallbacksAndMessages(null);
-        mainHandler.postDelayed(() -> exposureIndicator.animate().alpha(0f).setDuration(500).start(), 1500);
+        mainHandler.postDelayed(() -> exposureIndicator.animate().alpha(0f).setDuration(500).start(), 1000);
     }
 
-    private void forceLens(String id, float zoom) {
-        targetPhysicalId = id;
-        currentZoom = zoom;
-        startCameraAsync();
-    }
-
-    private void setupPermissions() {
+    private void checkPermissionsAndStart() {
         String[] perms = {Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO};
         List<String> needed = new ArrayList<>();
         for (String p : perms) if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) needed.add(p);
         if (!needed.isEmpty()) ActivityCompat.requestPermissions(this, needed.toArray(new String[0]), 100);
-        else startCameraAsync();
+        else startCameraSafe();
     }
 
-    private void startCameraAsync() {
-        // Inicialización Asíncrona para mantener 120Hz
-        cameraExecutor.execute(() -> {
+    private void startCameraSafe() {
+        // Blindaje: Solo iniciar si el SurfaceProvider está listo
+        viewFinder.post(() -> {
             ListenableFuture<ProcessCameraProvider> providerFuture = ProcessCameraProvider.getInstance(this);
             providerFuture.addListener(() -> {
                 try {
                     cameraProvider = providerFuture.get();
-                    mainHandler.post(this::bindCameraUseCases);
-                } catch (Exception e) { Log.e(TAG, "Async Init Failed", e); }
+                    bindCameraUseCases();
+                } catch (Exception e) {
+                    Log.e(TAG, "Fatal Camera Init Error", e);
+                    Toast.makeText(this, "Error de Cámara: Reintentando...", Toast.LENGTH_SHORT).show();
+                }
             }, ContextCompat.getMainExecutor(this));
         });
     }
@@ -249,6 +252,7 @@ public class MainActivity extends AppCompatActivity {
         if (cameraProvider == null) return;
         try {
             cameraProvider.unbindAll();
+            
             preview = new Preview.Builder().build();
             preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
             
@@ -260,25 +264,37 @@ public class MainActivity extends AppCompatActivity {
                         String id = getPhysicalIdRobust(info);
                         if (id != null && id.equals(targetPhysicalId)) filtered.add(info);
                     }
+                    // Fallback: Si no hay lente específica, usar la principal para evitar pantalla negra
                     return filtered.isEmpty() ? cameraInfos : filtered;
                 }).build();
 
             if (currentMode == Mode.VIDEO) {
-                Recorder recorder = new Recorder.Builder().setQualitySelector(QualitySelector.from(currentQuality)).build();
+                Recorder recorder = new Recorder.Builder()
+                    .setQualitySelector(QualitySelector.from(currentQuality))
+                    .build();
                 videoCapture = VideoCapture.withOutput(recorder);
                 camera = cameraProvider.bindToLifecycle(this, selector, preview, videoCapture);
             } else {
                 imageCapture = new ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY) // Zero Shutter Lag
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                     .build();
                 camera = cameraProvider.bindToLifecycle(this, selector, preview, imageCapture);
             }
 
             cameraControl = camera.getCameraControl();
             cameraControl.setZoomRatio(currentZoom);
+            
             if (currentMode == Mode.PRO) initializeManualControls();
             
-        } catch (Exception e) { Log.e(TAG, "Binding failed", e); }
+        } catch (Exception e) {
+            Log.e(TAG, "Binding Crash Avoided", e);
+            // Si falla con un lente específico, volver al lente 0 (Wide) automáticamente
+            if (!targetPhysicalId.equals(ID_WIDE)) {
+                targetPhysicalId = ID_WIDE;
+                currentZoom = 1.0f;
+                bindCameraUseCases();
+            }
+        }
     }
 
     private void initializeManualControls() {
@@ -289,7 +305,7 @@ public class MainActivity extends AppCompatActivity {
             CameraCharacteristics characteristics = manager.getCameraCharacteristics(c2Info.getCameraId());
             manualControls = new ManualCameraControls(c2Control, characteristics);
             updateProUI();
-        } catch (Exception e) { Log.e(TAG, "Manual controls error", e); }
+        } catch (Exception e) { Log.e(TAG, "Manual Controls Init Failed", e); }
     }
 
     private void updateProUI() {
@@ -310,18 +326,25 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
-    private void takePhoto() {
-        if (imageCapture == null) return;
-        imageCapture.takePicture(ContextCompat.getMainExecutor(this), new ImageCapture.OnImageCapturedCallback() {
-            @Override public void onCaptureSuccess(@NonNull ImageProxy image) { image.close(); }
-            @Override public void onError(@NonNull ImageCaptureException e) { Log.e(TAG, "Error", e); }
-        });
+    private void forceLens(String id, float zoom) {
+        targetPhysicalId = id;
+        currentZoom = zoom;
+        startCameraSafe();
     }
 
     private void toggleCamera() {
         lensFacing = (lensFacing == CameraSelector.LENS_FACING_BACK) ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
         targetPhysicalId = ID_WIDE;
-        startCameraAsync();
+        currentZoom = 1.0f;
+        startCameraSafe();
+    }
+
+    private void takePhoto() {
+        if (imageCapture == null) return;
+        imageCapture.takePicture(cameraExecutor, new ImageCapture.OnImageCapturedCallback() {
+            @Override public void onCaptureSuccess(@NonNull ImageProxy image) { image.close(); }
+            @Override public void onError(@NonNull ImageCaptureException e) { Log.e(TAG, "Capture Error", e); }
+        });
     }
 
     private void openSettings() {
