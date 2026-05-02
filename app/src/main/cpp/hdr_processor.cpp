@@ -2,6 +2,7 @@
 #include <cmath>
 #include <algorithm>
 #include <cstring>
+#include <jni.h>
 #include <android/log.h>
 #include <opencv2/opencv.hpp>
 
