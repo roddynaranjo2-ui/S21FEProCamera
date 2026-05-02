@@ -23,7 +23,7 @@
         android:orientation="horizontal"
         android:paddingHorizontal="16dp"
         android:paddingVertical="6dp"
-        android:visibility="gone"
+        android:visibility="visible"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -56,6 +56,36 @@
             android:letterSpacing="0.05" />
     </LinearLayout>
 
+    <!-- Sliders PRO (Ocultos por defecto, se activan en modo PRO) -->
+    <LinearLayout
+        android:id="@+id/pro_sliders_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="32dp"
+        app:layout_constraintBottom_toTopOf="@+id/zoom_slider">
+
+        <SeekBar
+            android:id="@+id/iso_slider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:max="100"
+            android:progressDrawable="@drawable/slider_track"
+            android:thumb="@drawable/slider_thumb"
+            android:splitTrack="false" />
+
+        <SeekBar
+            android:id="@+id/shutter_slider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progressDrawable="@drawable/slider_track"
+            android:thumb="@drawable/slider_thumb"
+            android:splitTrack="false" />
+    </LinearLayout>
+
     <!-- Slider de Zoom Digital (30x) -->
     <SeekBar
         android:id="@+id/zoom_slider"
@@ -71,7 +101,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Controles de Zoom (Botones más pequeños) -->
+    <!-- Controles de Zoom -->
     <LinearLayout
         android:id="@+id/zoom_controls"
         android:layout_width="wrap_content"
@@ -119,7 +149,6 @@
             android:fontFamily="sans-serif-light" />
     </LinearLayout>
 
-    <!-- Panel Inferior (Estilo S26 Ultra Refinado) -->
     <View
         android:id="@+id/bottom_panel_gradient"
         android:layout_width="match_parent"
@@ -127,7 +156,6 @@
         android:background="@drawable/bottom_panel_gradient"
         app:layout_constraintBottom_toBottomOf="parent" />
 
-    <!-- Selector de Modos (Más pequeño y elegante) -->
     <LinearLayout
         android:id="@+id/mode_selector"
         android:layout_width="wrap_content"
@@ -172,7 +200,6 @@
             android:letterSpacing="0.1" />
     </LinearLayout>
 
-    <!-- Botón de Captura (Refinado) -->
     <ImageButton
         android:id="@+id/capture_button"
         android:layout_width="76dp"
@@ -183,7 +210,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Cambio de Cámara -->
     <ImageButton
         android:id="@+id/switch_camera_button"
         android:layout_width="48dp"
@@ -198,7 +224,6 @@
         app:layout_constraintTop_toTopOf="@+id/capture_button"
         app:tint="@color/white" />
 
-    <!-- Galería -->
     <View
         android:id="@+id/gallery_preview"
         android:layout_width="48dp"

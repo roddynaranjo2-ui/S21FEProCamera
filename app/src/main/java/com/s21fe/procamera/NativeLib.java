@@ -7,7 +7,7 @@ package com.s21fe.procamera;
 public class NativeLib {
     
     static {
-        System.loadLibrary("native-lib");
+        System.loadLibrary("procamera");
     }
     
     // ============ HDR Processor ============
