@@ -4,41 +4,29 @@ private void bindCameraCases() {
     try {
         cameraProvider.unbindAll();
 
-        // 1. Configurar Preview
+        // 1. Configurar Preview con modo compatible para Samsung
         preview = new Preview.Builder()
                 .setTargetRotation(viewFinder.getDisplay().getRotation())
                 .build();
 
-        // 2. Configurar Captura
         imageCapture = new ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                 .build();
 
-        // 3. Selector simplificado para evitar bloqueo por ID
-        // Si queremos el lente principal, usamos DEFAULT_BACK_CAMERA primero
+        // 2. Usar el selector por defecto para asegurar imagen
         CameraSelector selector = CameraSelector.DEFAULT_BACK_CAMERA;
 
-        // 4. VINCULAR PRIMERO
+        // 3. VINCULAR PRIMERO AL CICLO DE VIDA
         camera = cameraProvider.bindToLifecycle(this, selector, preview, imageCapture);
 
-        // 5. ASIGNAR EL SURFACE DESPUÉS DE VINCULAR
+        // 4. CONECTAR EL VISOR DESPUÉS DE VINCULAR
+        // Esto evita que el Surface se quede esperando infinitamente
         preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
 
-        if (camera != null) {
-            camera2Control = Camera2CameraControl.from(camera.getCameraControl());
-            Camera2CameraInfo camera2Info = Camera2CameraInfo.from(camera.getCameraInfo());
-            CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-            
-            if (cameraManager != null) {
-                String cameraId = camera2Info.getCameraId();
-                CameraCharacteristics chars = cameraManager.getCameraCharacteristics(cameraId);
-                manualControls = new ManualCameraControls(camera2Control, chars);
-                Log.d(TAG, "Cámara iniciada en ID: " + cameraId);
-            }
-            isCameraInitialized = true;
-        }
+        isCameraInitialized = true;
+        Log.d(TAG, "Cámara vinculada con éxito");
+
     } catch (Exception e) { 
-        Log.e(TAG, "Error crítico al vincular cámara", e);
-        Toast.makeText(this, "Error de hardware: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        Log.e(TAG, "Error crítico de binding", e);
     }
 }
